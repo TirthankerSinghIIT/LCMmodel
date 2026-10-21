@@ -19,7 +19,10 @@
 //! distance to the band of width ε around the nearest line through two other
 //! visible robots (the core counts a robot that close as blocking; a band it
 //! stands in it only leaves), and never more than a quarter of the way to
-//! its nearest neighbour.
+//! its nearest neighbour. The directions and their opposites make a set
+//! symmetric under a half turn, so the widest gap always has a twin pointing
+//! the other way; the first in the robot's own angular order is taken, so the
+//! heading depends on its frame (any small move is allowed by the paper).
 
 use core::f64::consts::PI;
 use lcm_core::{
