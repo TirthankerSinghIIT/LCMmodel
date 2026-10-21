@@ -50,6 +50,29 @@ const added = await js(`(() => {
 })()`);
 check("ring: clicking a node adds a robot there", added === "2", String(added));
 
+// A 60-node ring with 40 robots stays readable: a node number on every few nodes (and every occupied
+// one), at most "R7 +3" per crowded node, every robot named in its node's hover title.
+const big = await js(`(() => {
+  const robots = Array.from({ length: 40 }, (_, k) => (k * 7) % 60).concat([5, 5, 5, 5]);
+  lcmRing.setStart({ nodes: 60, robots });
+  const labels = document.querySelectorAll("#ring text.label").length;
+  const ids = [...document.querySelectorAll("#ring text.ids")].map((t) => t.textContent);
+  const titled = [...document.querySelectorAll("#ring [data-node] title")].map((t) => t.textContent).filter((t) => t.includes("R")).join(" ");
+  const occupied = new Set(robots).size;
+  return { labels, occupied, longest: Math.max(...ids.map((t) => t.length)), named: robots.every((_, r) => titled.split(" ").map((w) => w.replace(",", "")).includes("R" + r)) };
+})()`);
+check("ring: a 60-node ring writes few node numbers", big.labels <= 24 + big.occupied && big.labels < 60, JSON.stringify(big));
+check("ring: crowded nodes stay short, hover names every robot", big.longest <= 7 && big.named, JSON.stringify(big));
+await shot("ring-60-nodes");
+// The speed slider says its pace; the CSV holds every turn.
+const pace = await js(`(() => { const s = document.getElementById("speed"); s.value = "10"; s.dispatchEvent(new Event("input")); return document.getElementById("speed_out").textContent; })()`);
+check("ring: the speed slider shows activations per second", pace === "10 / s", pace);
+const csv = await js(`(() => { const s = document.getElementById("preset"); s.value = "2"; s.dispatchEvent(new Event("change"));
+  while (lcmRing.state.status === "running") lcmRing.step();
+  const lines = lcmRing.traceCsv().trim().split("\\n");
+  return { header: lines[1], rows: lines.length - 2, turns: lcmRing.trace.length, first: lines[2] }; })()`);
+check("ring: the CSV export holds every turn", csv.header === "turn,epoch,robot,from,to,task,rule" && csv.rows === csv.turns && csv.rows > 0, JSON.stringify(csv));
+
 /* ------------------------------------------------- simulator examples */
 await navigate(`${base}/`);
 check("simulator loads", await until("window.lcm && lcm.state === 'ready'", 15000));

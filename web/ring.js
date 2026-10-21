@@ -69,7 +69,7 @@ function play() {
   if (timer) { stop(); return; }
   if (!ring || state.status !== "running") return;
   $("play").innerHTML = `${icon("pause")}<span class="label">Pause</span>`;
-  const tick = () => { if (step()) timer = setTimeout(tick, Number($("speed").value)); else stop(); };
+  const tick = () => { if (step()) timer = setTimeout(tick, 1000 / Number($("speed").value)); else stop(); };
   timer = setTimeout(tick, 0);
 }
 function stop() {
@@ -91,13 +91,17 @@ function draw(last = null) {
   const big = new Array(n).fill(false);
   for (const [first, len] of state?.holes ?? []) if (len === biggest) for (let k = 0; k < len; k++) big[(first + k) % n] = true;
   const nodeR = Math.max(7, Math.min(16, 300 / n));
+  // Big rings: text shrinks with the nodes, only every few node numbers are written (and every occupied
+  // node's), and a crowded node lists its first robot and how many more. Hover a node for all of it.
+  const font = Math.max(6.5, Math.min(11, nodeR * 0.85));
+  const every = Math.ceil(n / 24);
   let svg = `<defs><marker id="tip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--sg-active)"/></marker></defs>`;
   svg += `<circle class="edge" r="${R}"/>`;
   for (let v = 0; v < n; v++) {
     const [x, y] = at(v);
-    svg += `<circle class="node${count[v] ? " occupied" : ""}${big[v] ? " hole-big" : ""}" data-node="${v}" cx="${x}" cy="${y}" r="${nodeR}"/>`;
-    const [lx, ly] = [x * 1.2, y * 1.2];
-    svg += `<text class="label" x="${lx}" y="${ly}">${v}</text>`;
+    const who = ids[v].length ? `: ${ids[v].map((r) => `R${r}`).join(", ")}` : "";
+    svg += `<circle class="node${count[v] ? " occupied" : ""}${big[v] ? " hole-big" : ""}" data-node="${v}" cx="${x}" cy="${y}" r="${nodeR}"><title>Node ${v}${who}</title></circle>`;
+    if (v % every === 0 || count[v]) svg += `<text class="label" x="${x * 1.2}" y="${y * 1.2}" font-size="${font}">${v}</text>`;
   }
   const gathered = state?.status === "gathered";
   for (let v = 0; v < n; v++) {
@@ -105,9 +109,10 @@ function draw(last = null) {
     const [x, y] = at(v);
     const isNext = state && state.status === "running" && ids[v].includes(state.next);
     svg += `<circle class="robot${isNext ? " next" : ""}${gathered ? " ring-gathered" : ""}" cx="${x}" cy="${y}" r="${nodeR - 3}" pointer-events="none"/>`;
-    if (count[v] > 1) svg += `<text class="count" x="${x}" y="${y}">${count[v]}</text>`;
-    const [ix, iy] = [x * 0.78, y * 0.78];
-    svg += `<text class="ids" x="${ix}" y="${iy}">${ids[v].map((r) => `R${r}`).join(" ")}</text>`;
+    if (count[v] > 1) svg += `<text class="count" x="${x}" y="${y}" font-size="${font}">${count[v]}</text>`;
+    const shown = ids[v].length <= (n > 20 ? 1 : 3) ? ids[v].map((r) => `R${r}`).join(" ") : `R${ids[v][0]} +${ids[v].length - 1}`;
+    // Over 30 nodes, names are written only for the robot about to move; hover a node for the others.
+    if (n <= 30 || isNext) svg += `<text class="ids" x="${x * 0.78}" y="${y * 0.78}" font-size="${font}">${shown}</text>`;
   }
   // Where the next robot will go.
   if (state && state.status === "running" && (state.move === 1 || state.move === -1)) {
@@ -187,6 +192,25 @@ $("ties").addEventListener("change", rebuild);
 $("reset").addEventListener("click", rebuild);
 $("step").addEventListener("click", () => { stop(); step(); });
 $("play").addEventListener("click", play);
+function speedLabel() { $("speed_out").textContent = `${Number($("speed").value)} / s`; }
+$("speed").addEventListener("input", () => {
+  speedLabel();
+  if (timer) { stop(); play(); } // the new pace from the next activation
+});
+speedLabel();
+/** Every turn so far (not just the 200 the table shows), one row each. */
+function traceCsv() {
+  const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
+  const head = `# GatheRRing on a ${start.nodes}-ring, start ${start.robots.join(" ")}, choices left open: ${$("ties").value}`;
+  return [head, "turn,epoch,robot,from,to,task,rule",
+    ...trace.map((t) => [t.turn, t.epoch, t.robot, t.from, t.to, q(t.task), q(t.rule)].join(","))].join("\n") + "\n";
+}
+$("csv").addEventListener("click", () => {
+  const url = URL.createObjectURL(new Blob([traceCsv()], { type: "text/csv" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `gatherring-${start.nodes}-nodes.csv` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 $("clear").addEventListener("click", () => { start = { nodes: start.nodes, robots: [] }; $("preset").value = ""; rebuild(); });
 window.addEventListener("keydown", (e) => {
   if (e.target.closest?.("input, select, textarea")) return;
@@ -213,7 +237,7 @@ apply(current());
   const module = await import(`./pkg/lcm_wasm.js${suffix}`);
   await module.default(`./pkg/lcm_wasm_bg.wasm${suffix}`);
   wasm = module;
-  window.lcmRing = { get state() { return state; }, get trace() { return trace; }, step, rebuild, setStart: (s) => { start = s; $("nodes").value = s.nodes; rebuild(); } };
+  window.lcmRing = { get state() { return state; }, get trace() { return trace; }, step, rebuild, traceCsv, setStart: (s) => { start = s; $("nodes").value = s.nodes; rebuild(); } };
   $("preset").value = "0";
   $("preset").dispatchEvent(new Event("change"));
 })();
