@@ -15,6 +15,7 @@
 
 mod circle_formation;
 pub mod compass_gathering;
+pub mod mutual_visibility;
 pub mod randomized_gathering;
 mod gathering;
 mod go_to_center;
@@ -103,6 +104,11 @@ pub const REGISTRY: &[Entry] = &[
         build: randomized_gathering::plan_uniform,
     },
     Entry {
+        key: "MutualVisibility",
+        name: "Mutual visibility",
+        build: mutual_visibility::plan,
+    },
+    Entry {
         key: "SqGathering",
         name: "SqGathering",
         build: sq_gathering::plan,
@@ -126,6 +132,7 @@ pub fn notes(key: &str, config: &SimConfig) -> Vec<String> {
     match key {
         "SqGathering" => sq_gathering::notes(config),
         "CompassGathering" => compass_gathering::notes(config),
+        "MutualVisibility" => mutual_visibility::notes(config),
         "RandomizedGathering" | "RandomizedGatheringUniform" => randomized_gathering::notes(config),
         _ => Vec::new(),
     }
