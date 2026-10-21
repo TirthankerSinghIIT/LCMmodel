@@ -297,6 +297,8 @@ await setPlayback(playback);
 await click("#reset");
 await js("lcm.settings.reset()");
 await until("lcm.state === 'ready' && lcm.renderer.frame.flags.length === 500", 3000);
+await js(`(() => { const s = document.getElementById('algorithm'); s.value = 'CircleFormation'; s.dispatchEvent(new Event('change')); })()`);
+await sleep(300);
 check("the examples menu is hidden for an algorithm without examples", await js("document.getElementById('examples').hidden"));
 check("the allowed region is only drawn for Go-To-Center", (await js("lcm.renderer.options.allowedRegion")) === false);
 await js(`(() => { const s = document.getElementById('algorithm'); s.value = 'GoToCenter'; s.dispatchEvent(new Event('change')); })()`);
@@ -346,7 +348,7 @@ await js("lcm.settings.reset()");
 await until("lcm.state === 'ready' && lcm.settings.values.pattern === 'cloud' && lcm.renderer.frame.flags.length === 500", 3000);
 await setPlayback(playback);
 await js("document.getElementById('links').getAttribute('aria-pressed') === 'true' && document.getElementById('links').click()");
-check("back on Center of Gravity, the examples menu is hidden again", await js("document.getElementById('examples').hidden && document.getElementById('algorithm').value === 'Gathering'"));
+check("back on Center of Gravity, the examples menu shows its own examples", await js("!document.getElementById('examples').hidden && document.getElementById('algorithm').value === 'Gathering' && /FSYNC/.test(document.getElementById('examples_menu').textContent)"));
 
 // Follow the swarm: the view zooms in as the swarm shrinks. It is display only.
 const TWO_ROBOTS = "lcm.settings.apply({ open_world: true, pattern: 'custom', custom: '-300, 0\\n300, 0', scheduler: 'sequential', turn_gap: 'none' })";
