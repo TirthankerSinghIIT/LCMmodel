@@ -182,6 +182,11 @@ pub struct Simulation {
     /// Draws the robots' private frames, apart from the run's generator so
     /// turning frames on changes nothing else about a run.
     frame_rng: Rng,
+    /// `frames: "compass"`: each robot's current compass deviation (radians),
+    /// drawn once (static) or at each Look (dynamic).
+    compass: Vec<f64>,
+    compass_error: f64,
+    compass_static: bool,
     obstructed: bool,
     robot_radius: f64,
     positions: Vec<Point>,
@@ -344,10 +349,17 @@ impl Simulation {
             awaiting: false,
             frames: config.frames,
             frame_rng: Rng::new(config.random_seed ^ 0x9E37_79B9_7F4A_7C15),
+            compass: Vec::new(),
+            compass_error: config.compass_error.to_radians(),
+            compass_static: config.compass_static,
             obstructed: config.obstructed_visibility,
             robot_radius: config.robot_radius,
             positions: Vec::new(),
         };
+        if sim.frames == Frames::Compass {
+            let phi = sim.compass_error;
+            sim.compass = (0..n).map(|_| sim.frame_rng.uniform(-phi, phi)).collect();
+        }
         if sequential {
             sim.next_turn(0.0);
         }
@@ -376,6 +388,14 @@ impl Simulation {
     #[must_use]
     pub fn sequential(&self) -> bool {
         self.turns.is_some()
+    }
+
+    /// `frames: "compass"`: each robot's compass deviation from the global
+    /// north, in radians (the last one drawn, for a dynamic compass). Empty
+    /// otherwise.
+    #[must_use]
+    pub fn compass_deviations(&self) -> &[f64] {
+        &self.compass
     }
 
     /// SSYNC or FSYNC: robots act in rounds of simultaneous activations.
@@ -828,7 +848,22 @@ impl Simulation {
             let d = algorithm.compute(&look, rng, &mut self.scratch);
             return (d.target, d.terminate, d.overlay);
         }
-        let frame = LocalFrame::random(position, frame_rng, self.frames == Frames::Rotated);
+        let frame = if self.frames == Frames::Compass {
+            if !self.compass_static {
+                let phi = self.compass_error;
+                self.compass[i] = frame_rng.uniform(-phi, phi);
+            }
+            // Axes turned by the deviation: a point due north of the robot
+            // reads as `deviation` off its own north.
+            LocalFrame {
+                origin: position,
+                angle: -self.compass[i],
+                scale: 1.0,
+                reflect: false,
+            }
+        } else {
+            LocalFrame::random(position, frame_rng, self.frames == Frames::Rotated)
+        };
         for p in &mut self.view.pos {
             *p = frame.to_local(*p);
         }

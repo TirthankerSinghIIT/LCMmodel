@@ -73,6 +73,11 @@ pub enum Frames {
     Rotated,
     /// As `Rotated`, and the handedness is random too (no chirality).
     Disoriented,
+    /// An unreliable compass (Izumi et al. 2012): the robot's axes are the
+    /// global ones turned by a deviation of at most `compass_error` degrees
+    /// either way; unit length and handedness are shared. The deviation is
+    /// drawn once per robot (`compass_static`) or at every Look.
+    Compass,
 }
 
 /// Sequential scheduler: who takes the next turn. Every epoch gives each
@@ -181,6 +186,12 @@ pub struct SimConfig {
     pub multiplicity: MultiplicityModel,
     /// Global coordinates, or a private frame per robot and Look.
     pub frames: Frames,
+    /// `frames: "compass"`: the largest deviation of a robot's compass from
+    /// the global north, in degrees (0 to 180).
+    pub compass_error: f64,
+    /// `frames: "compass"`: each robot keeps one deviation for the whole run
+    /// (static compass); off, it gets a new one at every Look (dynamic).
+    pub compass_static: bool,
     /// A robot does not see robots hidden behind another robot.
     pub obstructed_visibility: bool,
     /// Robots are discs of this radius when they block the view (0: points,
@@ -251,6 +262,8 @@ impl Default for SimConfig {
             multiplicity_detection: false,
             multiplicity: MultiplicityModel::Weak,
             frames: Frames::Global,
+            compass_error: 0.0,
+            compass_static: true,
             obstructed_visibility: false,
             robot_radius: 0.0,
             max_events: None,
@@ -378,6 +391,12 @@ impl SimConfig {
                     "max_turns needs scheduler \"sequential\"".to_owned(),
                 ));
             }
+        }
+        if !(self.compass_error.is_finite() && (0.0..=180.0).contains(&self.compass_error)) {
+            return Err(ConfigError::Schedule(format!(
+                "compass_error must be between 0 and 180 degrees, got {}",
+                self.compass_error
+            )));
         }
         if !(self.robot_radius.is_finite() && self.robot_radius >= 0.0) {
             return Err(ConfigError::NotPositive {
