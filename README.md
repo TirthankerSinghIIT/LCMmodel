@@ -59,6 +59,7 @@ node scripts/ui-check.mjs                     # the simulator page in headless C
 node scripts/docs-check.mjs                   # the flowchart page in headless Chrome
 node scripts/responsive-check.mjs             # both pages at phone, tablet and desktop sizes
 node scripts/sqgathering-check.mjs            # SqGathering on both pages in headless Chrome
+node scripts/extras-check.mjs                 # ring page and the extras examples in headless Chrome
 python3 scripts/serve.py                      # then open http://localhost:8000/ (original: /old/); no browser caching
 ```
 

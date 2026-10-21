@@ -83,6 +83,9 @@ jobs:
       - name: SqGathering on both pages (headless Chrome)
         if: ${{ !cancelled() }}
         run: bash scripts/ci-check.sh "SqGathering pages" node scripts/sqgathering-check.mjs "$RUNNER_TEMP/shots/sqgathering"
+      - name: Ring page and extras examples (headless Chrome)
+        if: ${{ !cancelled() }}
+        run: bash scripts/ci-check.sh "Ring page and examples" node scripts/extras-check.mjs "$RUNNER_TEMP/shots/extras"
       - name: Simulator page (headless Chrome)
         # Its frame-rate targets (10,000 robots at 55+ fps) depend on the
         # machine; shared runners can miss them. A failure here is a warning.

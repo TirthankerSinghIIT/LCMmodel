@@ -348,7 +348,7 @@ const GTC_SEQUENTIAL = { scheduler: "sequential", turn_gap: "none", rigid_moveme
 const TWO_PAIRS = "-64, 0\n-64, 0\n64, 0\n64, 0";
 const PAIR_AND_ONE = "-60, 0\n-60, 0\n60, 0";
 const SQ = { open_world: true, pattern: "custom", turn_gap: "none", robot_speeds: 20, unlimited_visibility: true, num_of_faults: 0, frames: "global", schedule_text: "" };
-const EXAMPLE_BASE = { max_turns: 0, max_rounds: 0, schedule_text: "" };
+const EXAMPLE_BASE = { max_turns: 0, max_rounds: 0, schedule_text: "", threshold_precision: 5 };
 const EXAMPLES = {
   SqGathering: [
     { label: "Rendezvous: two robots", note: "κ = 0: the active robot walks to the other one",
@@ -377,7 +377,7 @@ const EXAMPLES = {
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 60, compass_static: true, scheduler: "ssync", turn_gap: "none", robot_speeds: 20, rigid_movement: true, num_of_faults: 0, schedule_text: "" } },
     { label: "Dynamic compass, SSYNC, φ = 40°", note: "A_SD: guaranteed for φ < 45°",
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 40, compass_static: false, scheduler: "ssync", turn_gap: "none", robot_speeds: 20, rigid_movement: true, num_of_faults: 0, schedule_text: "" } },
-    { label: "Dynamic compass, async, φ = 25°", note: "A_AD: guaranteed for φ < 30° (see docs: an open discrepancy at 29°)",
+    { label: "Dynamic compass, async, φ = 25°", note: "A_AD: guaranteed for φ < 30°. They meet and stay together, but under async never terminate (Remark 2): pause once they meet",
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 25, compass_static: false, scheduler: "async", robot_speeds: 20, rigid_movement: true, num_of_faults: 0 } },
   ],
   RandomizedGathering: [
@@ -390,8 +390,8 @@ const EXAMPLES = {
   MutualVisibility: [
     { label: "Twelve robots in a line", note: "Each sees only its neighbours; after one epoch everyone sees everyone",
       set: { open_world: true, frames: "global", unlimited_visibility: true, num_of_faults: 0, pattern: "line", num_of_robots: 12, size: 400, distribution: "even", scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 0, robot_speeds: 10, max_turns: 60 } },
-    { label: "A 5 × 5 grid", note: "Rows, columns and diagonals hide robots",
-      set: { open_world: true, frames: "global", unlimited_visibility: true, num_of_faults: 0, pattern: "custom", custom: Array.from({ length: 25 }, (_, k) => `${(k % 5) * 60 - 120}, ${Math.floor(k / 5) * 60 - 120}`).join("\n"), scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 0, robot_speeds: 10, max_turns: 100 } },
+    { label: "A 5 × 5 grid", note: "Rows, columns and diagonals hide robots; after two epochs all 25 see each other. Precision 10⁻⁹: its moves get smaller than the default ε",
+      set: { open_world: true, frames: "global", unlimited_visibility: true, num_of_faults: 0, pattern: "custom", custom: Array.from({ length: 25 }, (_, k) => `${(k % 5) * 60 - 120}, ${Math.floor(k / 5) * 60 - 120}`).join("\n"), scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 0, robot_speeds: 10, max_turns: 50, threshold_precision: 9 } },
   ],
   CrashGathering: [
     { label: "Ten robots, three crashed", note: "The others gather on one point; crashed robots stay where they are",
@@ -699,7 +699,7 @@ function updateHud(force = false) {
   let statusText = {
     loading: "Loading…", ready: "Ready", running: "Running", paused: "Paused",
     ended: frame?.ended ? (frame.terminated < frame.robots ? `Ended · ${frame.terminated} of ${frame.robots} terminated, the rest faulty` : "Ended · all terminated")
-      : frame?.stop === "stalled" && frame.seeing != null ? `Stopped · ${frame.seeing} of ${frame.robots} see everyone`
+      : frame?.seeing != null ? `Stopped · ${frame.seeing} of ${frame.robots} see everyone`
       : frame?.stop === "stalled" ? "Stalled · nothing can move any more"
       : frame?.stop === "max-turns" ? "Stopped · turn limit reached"
       : frame?.stop === "max-rounds" ? "Stopped · round limit reached" : `Stopped (${frame?.stop})`,
