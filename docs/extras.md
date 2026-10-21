@@ -77,8 +77,9 @@ the code and the page say so.
 
 ## Try it
 
-- Simulator: pick *Two robots, unreliable compasses*, *Randomized gathering*, *Mutual visibility* or
-  *Gathering despite crashes* and open **Examples**. Settings → Robot model has the compass and
-  local detection; Settings → Scheduler has k-ASYNC.
-- Ring: the target button in the toolbar, or `/web/ring.html`. CLI: `lcm ring config.json --trace`
+- Simulator: Algorithm → *Advanced gathering…* (then the variant in the sidebar: compasses,
+  randomized, crash faults) or Other tasks → *Mutual visibility*, and open **Examples**. Settings →
+  Robot model · advanced has the compass and local detection; Settings → Scheduler has k-ASYNC.
+  Overview of everything: [whats-new.md](whats-new.md).
+- Ring: Algorithm → Other tasks → *Gathering on a ring ↗*, or `/web/ring.html`. CLI: `lcm ring config.json --trace`
   with `{"nodes": 9, "robots": [0, 2, 5]}`.

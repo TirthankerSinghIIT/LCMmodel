@@ -36,6 +36,8 @@ New in the Rust core: **SqGathering** (Algorithm 8 of the sequential-schedulers 
 
 **Extras** (details and open questions: [`docs/extras.md`](docs/extras.md)): unreliable compasses, the k-ASYNC scheduler, local multiplicity detection; algorithms for two robots with unreliable compasses (Izumi et al.), randomized gathering (Pattanayak et al.), gathering despite crash faults with weak multiplicity, mutual visibility under obstructed visibility, and gathering on a ring of nodes under round robin (`web/ring.html`, `lcm ring`).
 
+**What's new on the fork's branches**, and how to try each feature: [`docs/whats-new.md`](docs/whats-new.md).
+
 **What's where:** [`report.md`](report.md) is the full report (method, results, every test). [`docs/core-schema.md`](docs/core-schema.md) is the core's contract. The code is in `crates/` (Rust) and `web/` (browser page; `index.html` at the root opens it, the original page is in `old/`).
 
 **From the command line:** `cargo build --release -p lcm-cli`, then `./target/release/lcm run config.json` runs a configuration (the same settings as the page, see [`docs/core-schema.md`](docs/core-schema.md)) and prints a one-line JSON summary. Add `--trace trace.jsonl` (or `trace.csv`) to also write what every robot event did: the robot, the event, its position and target, the circle its algorithm computed, and at each Look which robots it could see. `--ticks` adds the clock ticks. For example, Go-To-Center on a chain of three robots with limited sight, one at a time:
