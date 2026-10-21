@@ -1,6 +1,8 @@
 //! What an algorithm sees and returns (docs/core-schema.md §7).
 
+use crate::config::MultiplicityModel;
 use crate::geom::{Circle, Point};
+use crate::occupancy::{perceive, Occupied};
 use crate::rng::Rng;
 use crate::robots::RobotState;
 
@@ -15,6 +17,8 @@ pub struct Model {
     pub visibility: f64,
     pub width_bound: Option<f64>,
     pub height_bound: Option<f64>,
+    /// What a robot can tell about points several robots share.
+    pub multiplicity: MultiplicityModel,
 }
 
 /// The robots one robot sees at the instant of its look, in ID order,
@@ -79,6 +83,20 @@ pub struct Look<'a> {
     pub position: Point,
     pub view: &'a View,
     pub model: &'a Model,
+}
+
+impl Look<'_> {
+    /// The occupied points this robot sees, as its multiplicity detection
+    /// lets it perceive them, and the index of the one it stands on.
+    #[must_use]
+    pub fn occupied(&self) -> (Vec<Occupied>, usize) {
+        perceive(
+            &self.view.pos,
+            self.me_index,
+            self.model.eps,
+            self.model.multiplicity,
+        )
+    }
 }
 
 /// Change to the circle a robot displays (Python `robot.sec`).

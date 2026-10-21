@@ -24,6 +24,9 @@ pub enum Stop {
     MaxTurns = 6,
     /// Only `advance_to_move` returns it: a robot has just started a move.
     Moved = 7,
+    MaxRounds = 8,
+    /// An `await` schedule waits for the next turn or round (adversary mode).
+    AwaitingSchedule = 9,
 }
 
 impl From<StopReason> for Stop {
@@ -36,6 +39,8 @@ impl From<StopReason> for Stop {
             StopReason::MaxTime => Self::MaxTime,
             StopReason::Stalled => Self::Stalled,
             StopReason::MaxTurns => Self::MaxTurns,
+            StopReason::MaxRounds => Self::MaxRounds,
+            StopReason::AwaitingSchedule => Self::AwaitingSchedule,
         }
     }
 }

@@ -28,6 +28,51 @@ pub enum SchedulerKind {
     Async,
     /// One robot at a time does a whole Look-Compute-Move; the rest stay still.
     Sequential,
+    /// Semi-synchronous rounds: each round a non-empty subset of the robots
+    /// looks at the same instant, computes, and moves; the round ends once
+    /// every one of them has stopped.
+    Ssync,
+    /// Fully synchronous rounds: every live robot is active in every round.
+    Fsync,
+}
+
+impl SchedulerKind {
+    /// Rounds of simultaneous activations (SSYNC or FSYNC).
+    #[must_use]
+    pub const fn rounds(self) -> bool {
+        matches!(self, Self::Ssync | Self::Fsync)
+    }
+}
+
+/// What a robot can tell about a point several robots share. Algorithms read
+/// it through [`crate::Look::occupied`]; those that read the raw view (the
+/// ports of the Python algorithms) are unaffected.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
+pub enum MultiplicityModel {
+    /// Only the set of occupied points: a shared point looks like any other.
+    None,
+    /// One bit per occupied point: one robot, or more than one.
+    #[default]
+    Weak,
+    /// The number of robots on each occupied point.
+    Strong,
+}
+
+/// The coordinate system each robot computes in.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
+pub enum Frames {
+    /// Everyone shares the global frame (the original simulator).
+    #[default]
+    Global,
+    /// At each Look the robot gets a frame of its own: itself at the origin,
+    /// a random rotation and unit length, the common handedness.
+    Rotated,
+    /// As `Rotated`, and the handedness is random too (no chirality).
+    Disoriented,
 }
 
 /// Sequential scheduler: who takes the next turn. Every epoch gives each
@@ -107,6 +152,9 @@ pub enum ScheduleEnd {
     RoundRobin,
     /// Play the list again (it must name every robot, to stay fair).
     Repeat,
+    /// Wait for the next activation to be added while the run goes on (an
+    /// adversary choosing turns live): `advance` returns `AwaitingSchedule`.
+    Await,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -127,7 +175,17 @@ pub struct SimConfig {
     pub sampling_rate: f64,
     pub threshold_precision: u8,
     pub random_seed: u64,
+    /// Display only: draw how many robots share each point.
     pub multiplicity_detection: bool,
+    /// What robots can tell about shared points (`none`, `weak`, `strong`).
+    pub multiplicity: MultiplicityModel,
+    /// Global coordinates, or a private frame per robot and Look.
+    pub frames: Frames,
+    /// A robot does not see robots hidden behind another robot.
+    pub obstructed_visibility: bool,
+    /// Robots are discs of this radius when they block the view (0: points,
+    /// which block a view only when exactly in line, to within ε).
+    pub robot_radius: f64,
     pub max_events: Option<u64>,
     pub max_time: Option<f64>,
     /// No world box: algorithms get no bounds. Off reproduces the original.
@@ -150,8 +208,18 @@ pub struct SimConfig {
     pub stop_fraction: f64,
     /// Sequential only: the turns, in order, instead of `activation_order`.
     pub schedule: Option<Vec<Activation>>,
-    /// Sequential only: what follows the end of `schedule`.
+    /// What follows the end of `schedule` (sequential) or `rounds` (SSYNC).
     pub schedule_end: ScheduleEnd,
+    /// SSYNC: chance that a live robot is active in a round. A round with
+    /// nobody drawn activates one robot at random, so rounds are never empty.
+    pub ssync_probability: f64,
+    /// SSYNC: a robot left out of this many rounds in a row is activated in
+    /// the next one, so the scheduler stays fair.
+    pub ssync_fairness: u32,
+    /// SSYNC: the robots of each round, in order, instead of random draws.
+    pub rounds: Option<Vec<Vec<usize>>>,
+    /// SSYNC and FSYNC: stop after this many rounds. `None`: no limit.
+    pub max_rounds: Option<u64>,
     /// Sequential only: stop after this many turns (`advance` then returns
     /// `MaxTurns`). `None`: no limit.
     pub max_turns: Option<u64>,
@@ -181,6 +249,10 @@ impl Default for SimConfig {
             threshold_precision: 5,
             random_seed: 12345,
             multiplicity_detection: false,
+            multiplicity: MultiplicityModel::Weak,
+            frames: Frames::Global,
+            obstructed_visibility: false,
+            robot_radius: 0.0,
             max_events: None,
             max_time: None,
             open_world: false,
@@ -193,6 +265,10 @@ impl Default for SimConfig {
             stop_fraction: 0.5,
             schedule: None,
             schedule_end: ScheduleEnd::RoundRobin,
+            ssync_probability: 0.5,
+            ssync_fairness: 4,
+            rounds: None,
+            max_rounds: None,
             max_turns: None,
             multiplicities: 0,
             multiplicity_size: 0,
@@ -303,23 +379,84 @@ impl SimConfig {
                 ));
             }
         }
-        self.validate_schedule()
+        if !(self.robot_radius.is_finite() && self.robot_radius >= 0.0) {
+            return Err(ConfigError::NotPositive {
+                field: "robot_radius",
+                value: self.robot_radius,
+            });
+        }
+        if !(self.ssync_probability > 0.0 && self.ssync_probability <= 1.0) {
+            return Err(ConfigError::Schedule(format!(
+                "ssync_probability must be in (0, 1], got {}",
+                self.ssync_probability
+            )));
+        }
+        if self.ssync_fairness == 0 {
+            return Err(ConfigError::Schedule(
+                "ssync_fairness must be at least 1".to_owned(),
+            ));
+        }
+        if let Some(rounds) = self.max_rounds {
+            if rounds == 0 {
+                return Err(ConfigError::Schedule(
+                    "max_rounds must be at least 1".to_owned(),
+                ));
+            }
+            if !self.scheduler.rounds() {
+                return Err(ConfigError::Schedule(
+                    "max_rounds needs scheduler \"ssync\" or \"fsync\"".to_owned(),
+                ));
+            }
+        }
+        self.validate_schedule()?;
+        self.validate_rounds()
     }
 
-    /// An explicit schedule needs the sequential scheduler, robots that exist,
-    /// and, to name a stopping point, non-rigid movement with a `delta`.
-    fn validate_schedule(&self) -> Result<(), ConfigError> {
-        let Some(list) = &self.schedule else {
+    /// Explicit SSYNC rounds: non-empty sets of robots that exist.
+    fn validate_rounds(&self) -> Result<(), ConfigError> {
+        let fail = |message: String| Err(ConfigError::Schedule(message));
+        let Some(list) = &self.rounds else {
+            if self.schedule_end == ScheduleEnd::Await && self.scheduler == SchedulerKind::Ssync {
+                return fail(
+                    "schedule_end \"await\" needs rounds (the list may start empty)".to_owned(),
+                );
+            }
             return Ok(());
         };
-        let fail = |message: String| Err(ConfigError::Schedule(message));
-        if self.scheduler != SchedulerKind::Sequential {
-            return fail("schedule needs scheduler \"sequential\"".to_owned());
+        if self.scheduler != SchedulerKind::Ssync {
+            return fail("rounds needs scheduler \"ssync\"".to_owned());
         }
-        if list.is_empty() {
-            return fail("schedule must name at least one turn".to_owned());
+        if list.is_empty() && self.schedule_end != ScheduleEnd::Await {
+            return fail("rounds must name at least one round".to_owned());
         }
-        let n = if self
+        let n = self.robot_count();
+        let mut named = vec![false; n];
+        for (k, round) in list.iter().enumerate() {
+            if round.is_empty() {
+                return fail(format!("rounds[{k}] activates nobody"));
+            }
+            for &r in round {
+                if r >= n {
+                    return fail(format!(
+                        "rounds[{k}] activates robot {r} but there are only {n} robots"
+                    ));
+                }
+                named[r] = true;
+            }
+        }
+        if self.schedule_end == ScheduleEnd::Repeat {
+            if let Some(r) = named.iter().position(|x| !x) {
+                return fail(format!(
+                    "repeating rounds must name every robot to be fair; robot {r} is never activated"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// The number of robots the run will have.
+    fn robot_count(&self) -> usize {
+        if self
             .initial_positions
             .as_ref()
             .is_some_and(|p| p.len() == self.num_of_robots as usize)
@@ -327,7 +464,30 @@ impl SimConfig {
             self.num_of_robots as usize
         } else {
             self.resolve_positions().len()
+        }
+    }
+
+    /// An explicit schedule needs the sequential scheduler, robots that exist,
+    /// and, to name a stopping point, non-rigid movement with a `delta`.
+    fn validate_schedule(&self) -> Result<(), ConfigError> {
+        let fail = |message: String| Err(ConfigError::Schedule(message));
+        let Some(list) = &self.schedule else {
+            if self.schedule_end == ScheduleEnd::Await
+                && self.scheduler == SchedulerKind::Sequential
+            {
+                return fail(
+                    "schedule_end \"await\" needs a schedule (the list may start empty)".to_owned(),
+                );
+            }
+            return Ok(());
         };
+        if self.scheduler != SchedulerKind::Sequential {
+            return fail("schedule needs scheduler \"sequential\"".to_owned());
+        }
+        if list.is_empty() && self.schedule_end != ScheduleEnd::Await {
+            return fail("schedule must name at least one turn".to_owned());
+        }
+        let n = self.robot_count();
         for (k, a) in list.iter().enumerate() {
             if a.robot() >= n {
                 return fail(format!(
