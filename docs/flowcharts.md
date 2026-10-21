@@ -918,7 +918,7 @@ pub fn fill_frame(
 }
 ```
 
-`draw` — [`web/renderer.js:452`](../web/renderer.js#L452)
+`draw` — [`web/renderer.js:500`](../web/renderer.js#L500)
 
 ```js
 draw(ctx = this.ctx, dpr = this.dpr) {
@@ -1071,6 +1071,37 @@ draw(ctx = this.ctx, dpr = this.dpr) {
     ctx.setLineDash([]);
   }
 
+  // Motion trails: each robot's recent path, fading out, in its own colour.
+  const trail = this.trail;
+  if (this.options.trails && trail && trail.n === n && trail.count > 1 && n <= TRAIL_MAX) {
+    ctx.save();
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(1.2, Math.min(3, r * 0.9));
+    const BANDS = 4, per = Math.ceil((trail.count - 1) / BANDS);
+    for (let c = 0; c < COLORS.length; c++) {
+      if (!counts[c]) continue;
+      ctx.strokeStyle = COLORS[c].fill;
+      for (let b = 0; b < BANDS; b++) {
+        // Band 0 is the oldest part of every trail, drawn faintest.
+        ctx.globalAlpha = 0.07 + 0.11 * b;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          if (colorOf[i] !== c) continue;
+          const from = b * per, to = Math.min(trail.count - 1, (b + 1) * per);
+          for (let k = from; k < to; k++) {
+            const s0 = (trail.head - trail.count + k + TRAIL_LEN) % TRAIL_LEN, s1 = (s0 + 1) % TRAIL_LEN;
+            const x0 = trail.buf[2 * n * s0 + 2 * i], y0 = trail.buf[2 * n * s0 + 2 * i + 1];
+            const x1 = trail.buf[2 * n * s1 + 2 * i], y1 = trail.buf[2 * n * s1 + 2 * i + 1];
+            if (x0 === x1 && y0 === y1) continue;
+            ctx.moveTo(WX(x0), WY(y0)); ctx.lineTo(WX(x1), WY(y1));
+          }
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   // Robot bodies, colour by colour: fillRect dots, or stamped sprites.
   const snap = (v) => Math.round(v * dpr) / dpr;
   const outline = n <= LOD.outlines ? this.theme.outline : null;
@@ -1087,6 +1118,52 @@ draw(ctx = this.ctx, dpr = this.dpr) {
       for (let i = 0; i < n; i++) {
         if (colorOf[i] === c) ctx.drawImage(sp.canvas, snap(X(xy[2 * i]) - sp.half), snap(Y(xy[2 * i + 1]) - sp.half), sp.size, sp.size);
       }
+    }
+  }
+
+  // Where each moving robot is heading: a small hollow marker in its colour.
+  if (n <= PULSE_MAX) {
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < n; i++) {
+      if ((flags[i] & 3) !== STATE_MOVE || !(target[2 * i] === target[2 * i])) continue;
+      ctx.strokeStyle = COLORS[colorOf[i]].fill; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(X(target[2 * i]), Y(target[2 * i + 1]), Math.max(2.5, r * 0.8), 0, 2 * Math.PI); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Decision pulses: a ring that grows and fades when a robot picks a new destination.
+  if (this.pulses.size && n <= PULSE_MAX) {
+    const now = performance.now();
+    ctx.save();
+    ctx.strokeStyle = this.theme.accent; ctx.lineWidth = 2;
+    for (const [i, t0] of this.pulses) {
+      const age = now - t0;
+      if (age > PULSE_MS || i >= n) { this.pulses.delete(i); continue; }
+      const k = age / PULSE_MS;
+      ctx.globalAlpha = 0.75 * (1 - k);
+      ctx.beginPath(); ctx.arc(X(xy[2 * i]), Y(xy[2 * i + 1]), Math.max(r, 2) + 3 + 14 * k, 0, 2 * Math.PI); ctx.stroke();
+    }
+    ctx.restore();
+    if (this.pulses.size) this.requestDraw();
+  }
+
+  // The swarm has gathered: a soft green halo around it, fading out.
+  if (this.halo) {
+    const age = performance.now() - this.halo;
+    if (age > HALO_MS) this.halo = 0;
+    else {
+      const k = age / HALO_MS, cx = X(0), cy = Y(0);
+      ctx.save();
+      ctx.strokeStyle = "#10b981"; ctx.lineWidth = 3;
+      for (const lag of [0, 0.22]) {
+        const kk = Math.max(0, k - lag);
+        ctx.globalAlpha = 0.6 * (1 - kk);
+        ctx.beginPath(); ctx.arc(cx, cy, 12 + 70 * kk, 0, 2 * Math.PI); ctx.stroke();
+      }
+      ctx.restore();
+      this.requestDraw();
     }
   }
 

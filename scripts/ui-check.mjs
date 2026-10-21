@@ -457,8 +457,8 @@ await key("L", "KeyL", 76);
 check("there is no lights button, and L does nothing", await js("!document.getElementById('lights') && lcm.renderer.options.showLights === false"));
 const toolsNow = await js(`(() => { const t = document.getElementById('tools'); const shown = [...t.querySelectorAll('button')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id);
   return { shown, columns: getComputedStyle(t).gridTemplateColumns.split(' ').length, linksHidden: document.getElementById('links').hidden }; })()`);
-check("the view tools are in pairs, two columns, without + and − (those are in the status panel): follow, fit, grid, measure, export, full screen, theme, help",
-  toolsNow.columns === 2 && JSON.stringify(toolsNow.shown) === JSON.stringify(["follow", "fit", "grid", "measure", "export", "fullscreen", "theme", "help"]), JSON.stringify(toolsNow));
+check("the view tools are in two columns, without + and − (those are in the status panel): follow, fit, grid, trails, measure, export, full screen, theme, help",
+  toolsNow.columns === 2 && JSON.stringify(toolsNow.shown) === JSON.stringify(["follow", "fit", "grid", "trails", "measure", "export", "fullscreen", "theme", "help"]), JSON.stringify(toolsNow));
 check("with unlimited sight the who-sees-whom button is hidden, and V does nothing", toolsNow.linksHidden && (await (async () => { await key("V", "KeyV", 86); return js("lcm.renderer.options.links === false"); })()));
 const zoomBefore = await js("(() => { lcm.renderer.resetView(); return lcm.renderer.zoom; })()");
 await click("#hud_zoom_in");

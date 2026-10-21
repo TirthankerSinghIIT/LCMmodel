@@ -1055,7 +1055,7 @@ window.addEventListener("keydown", (e) => {
     f: () => renderer.resetView(), F: toggleFullscreen,
     z: toggleFollow, Z: toggleFollow,
     g: toggleGrid, G: toggleGrid,
-    l: toggleTrails, L: toggleTrails,
+    p: toggleTrails, P: toggleTrails,
     o: toggleOverview, O: toggleOverview,
     m: toggleMeasure, M: toggleMeasure,
     d: () => setEditor(!editor.on), D: () => setEditor(!editor.on),
