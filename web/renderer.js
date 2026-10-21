@@ -29,19 +29,22 @@ export function fmtDistance(v) {
   return `${m}×10${[...String(Number(e))].map((c) => SUPERSCRIPT[c]).join("")}`;
 }
 
-// Same colours and precedence as the Pyodide page (main.js colorForRobot).
+// Same states and precedence as the Pyodide page (main.js colorForRobot), in a calmer palette: blues and
+// greens for robots at work, amber for waiting, slate for finished, reds and violets for faults.
 export const COLORS = [
-  { key: "active", label: "Active", fill: "#007aff" },
-  { key: "move", label: "Moving", fill: "#34c759" },
-  { key: "frozen", label: "Frozen", fill: "#ff9500" },
-  { key: "terminated", label: "Terminated", fill: "#a0a0a0" },
-  { key: "crash", label: "Crashed", fill: "#555555" },
-  { key: "byzantine", label: "Byzantine", fill: "#e0115f" },
-  { key: "omission", label: "Omission fault", fill: "#00bcd4" },
-  { key: "delay", label: "Delay fault", fill: "#9c27b0" },
-  { key: "task-red", label: "SEC task", fill: "#dc2626" },
+  { key: "active", label: "Active", fill: "#3b82f6" },
+  { key: "move", label: "Moving", fill: "#10b981" },
+  { key: "frozen", label: "Frozen", fill: "#f59e0b" },
+  { key: "terminated", label: "Terminated", fill: "#94a3b8" },
+  { key: "crash", label: "Crashed", fill: "#475569" },
+  { key: "byzantine", label: "Byzantine", fill: "#e11d48" },
+  { key: "omission", label: "Omission fault", fill: "#06b6d4" },
+  { key: "delay", label: "Delay fault", fill: "#8b5cf6" },
+  { key: "task-red", label: "SEC task", fill: "#ef4444" },
   { key: "task-blue", label: "Gathering task", fill: "#2563eb" },
 ];
+// Motion trails and decision pulses are drawn up to these swarm sizes (they cost a path per robot).
+const TRAIL_MAX = 1500, TRAIL_LEN = 28, PULSE_MAX = 200, PULSE_MS = 650, HALO_MS = 1800;
 const C = Object.fromEntries(COLORS.map((c, i) => [c.key, i]));
 export const LIGHTS = [null, "#3b82f6", "#ef4444", "#22c55e"];
 
@@ -92,7 +95,13 @@ export class Renderer {
     this.onFollowChange = null;
     // CSS px covered by floating panels; the world is fitted into what's left.
     this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
-    this.options = { showLights: false, visibility: null, links: false, allowedRegion: false, multiplicities: false, walk: null, grid: true, measure: null, adversary: null, editor: null };
+    this.options = { showLights: false, visibility: null, links: false, allowedRegion: false, multiplicities: false, walk: null, grid: true, measure: null, adversary: null, editor: null, trails: true };
+    // Motion trails: each robot's recent positions (world units), newest last, in a ring buffer per robot.
+    this.trail = null;
+    // Decision pulses: robot -> when it picked a new destination; and the targets last seen.
+    this.pulses = new Map();
+    this.lastTargets = null;
+    this.halo = 0; // when the swarm finished (a green halo fades out), 0 if none
     this.gridState = null; // what the last grid drawn looked like (for the page and its checks)
     this.frame = null;
     this.selected = -1;
@@ -137,7 +146,46 @@ export class Renderer {
     requestAnimationFrame(() => { this.pending = false; this.draw(); });
   }
 
-  setFrame(frame) { this.frame = frame; if (this.follow) this.measureSwarm(); this.requestDraw(); }
+  setFrame(frame) {
+    const prev = this.frame;
+    this.frame = frame;
+    this.recordMotion(frame, prev);
+    if (frame.ended && !(prev && prev.ended) && frame.terminated === frame.flags.length && frame.flags.length > 1) this.halo = performance.now();
+    if (this.follow) this.measureSwarm();
+    this.requestDraw();
+  }
+
+  /** Forget trails, pulses and the halo (a new run). */
+  clearMotion() { this.trail = null; this.pulses.clear(); this.lastTargets = null; this.halo = 0; }
+
+  /** Trails and decision pulses from a new frame. A new run (other robot count, or time going back) starts over. */
+  recordMotion(f, prev) {
+    const n = f.flags.length;
+    if (!prev || prev.flags.length !== n || f.time < prev.time || f.events < prev.events) this.clearMotion();
+    if (n <= TRAIL_MAX) {
+      let t = this.trail;
+      if (!t || t.n !== n) t = this.trail = { n, buf: new Float64Array(2 * n * TRAIL_LEN), head: 0, count: 0, time: -1 };
+      if (f.time !== t.time) {
+        const ox = f.originX ?? 0, oy = f.originY ?? 0, base = 2 * n * t.head;
+        for (let i = 0; i < n; i++) { t.buf[base + 2 * i] = ox + f.xy[2 * i]; t.buf[base + 2 * i + 1] = oy + f.xy[2 * i + 1]; }
+        t.head = (t.head + 1) % TRAIL_LEN;
+        t.count = Math.min(TRAIL_LEN, t.count + 1);
+        t.time = f.time;
+      }
+    }
+    if (n <= PULSE_MAX && f.target) {
+      const ox = f.originX ?? 0, oy = f.originY ?? 0, now = performance.now();
+      const last = this.lastTargets && this.lastTargets.length === 2 * n ? this.lastTargets : null;
+      const next = new Float64Array(2 * n);
+      for (let i = 0; i < n; i++) {
+        const tx = f.target[2 * i], ty = f.target[2 * i + 1];
+        next[2 * i] = tx === tx ? ox + tx : NaN;
+        next[2 * i + 1] = ty === ty ? oy + ty : NaN;
+        if (last && next[2 * i] === next[2 * i] && (Math.abs(next[2 * i] - last[2 * i]) > 1e-9 || Math.abs(next[2 * i + 1] - last[2 * i + 1]) > 1e-9 || last[2 * i] !== last[2 * i])) this.pulses.set(i, now);
+      }
+      this.lastTargets = next;
+    }
+  }
 
   /** Centre (the frame's origin, the centroid of the robots that have not crashed) and radius. */
   measureSwarm() {
@@ -599,6 +647,37 @@ export class Renderer {
       ctx.setLineDash([]);
     }
 
+    // Motion trails: each robot's recent path, fading out, in its own colour.
+    const trail = this.trail;
+    if (this.options.trails && trail && trail.n === n && trail.count > 1 && n <= TRAIL_MAX) {
+      ctx.save();
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.lineWidth = Math.max(1.2, Math.min(3, r * 0.9));
+      const BANDS = 4, per = Math.ceil((trail.count - 1) / BANDS);
+      for (let c = 0; c < COLORS.length; c++) {
+        if (!counts[c]) continue;
+        ctx.strokeStyle = COLORS[c].fill;
+        for (let b = 0; b < BANDS; b++) {
+          // Band 0 is the oldest part of every trail, drawn faintest.
+          ctx.globalAlpha = 0.07 + 0.11 * b;
+          ctx.beginPath();
+          for (let i = 0; i < n; i++) {
+            if (colorOf[i] !== c) continue;
+            const from = b * per, to = Math.min(trail.count - 1, (b + 1) * per);
+            for (let k = from; k < to; k++) {
+              const s0 = (trail.head - trail.count + k + TRAIL_LEN) % TRAIL_LEN, s1 = (s0 + 1) % TRAIL_LEN;
+              const x0 = trail.buf[2 * n * s0 + 2 * i], y0 = trail.buf[2 * n * s0 + 2 * i + 1];
+              const x1 = trail.buf[2 * n * s1 + 2 * i], y1 = trail.buf[2 * n * s1 + 2 * i + 1];
+              if (x0 === x1 && y0 === y1) continue;
+              ctx.moveTo(WX(x0), WY(y0)); ctx.lineTo(WX(x1), WY(y1));
+            }
+          }
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
     // Robot bodies, colour by colour: fillRect dots, or stamped sprites.
     const snap = (v) => Math.round(v * dpr) / dpr;
     const outline = n <= LOD.outlines ? this.theme.outline : null;
@@ -615,6 +694,52 @@ export class Renderer {
         for (let i = 0; i < n; i++) {
           if (colorOf[i] === c) ctx.drawImage(sp.canvas, snap(X(xy[2 * i]) - sp.half), snap(Y(xy[2 * i + 1]) - sp.half), sp.size, sp.size);
         }
+      }
+    }
+
+    // Where each moving robot is heading: a small hollow marker in its colour.
+    if (n <= PULSE_MAX) {
+      ctx.save();
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < n; i++) {
+        if ((flags[i] & 3) !== STATE_MOVE || !(target[2 * i] === target[2 * i])) continue;
+        ctx.strokeStyle = COLORS[colorOf[i]].fill; ctx.globalAlpha = 0.85;
+        ctx.beginPath(); ctx.arc(X(target[2 * i]), Y(target[2 * i + 1]), Math.max(2.5, r * 0.8), 0, 2 * Math.PI); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Decision pulses: a ring that grows and fades when a robot picks a new destination.
+    if (this.pulses.size && n <= PULSE_MAX) {
+      const now = performance.now();
+      ctx.save();
+      ctx.strokeStyle = this.theme.accent; ctx.lineWidth = 2;
+      for (const [i, t0] of this.pulses) {
+        const age = now - t0;
+        if (age > PULSE_MS || i >= n) { this.pulses.delete(i); continue; }
+        const k = age / PULSE_MS;
+        ctx.globalAlpha = 0.75 * (1 - k);
+        ctx.beginPath(); ctx.arc(X(xy[2 * i]), Y(xy[2 * i + 1]), Math.max(r, 2) + 3 + 14 * k, 0, 2 * Math.PI); ctx.stroke();
+      }
+      ctx.restore();
+      if (this.pulses.size) this.requestDraw();
+    }
+
+    // The swarm has gathered: a soft green halo around it, fading out.
+    if (this.halo) {
+      const age = performance.now() - this.halo;
+      if (age > HALO_MS) this.halo = 0;
+      else {
+        const k = age / HALO_MS, cx = X(0), cy = Y(0);
+        ctx.save();
+        ctx.strokeStyle = "#10b981"; ctx.lineWidth = 3;
+        for (const lag of [0, 0.22]) {
+          const kk = Math.max(0, k - lag);
+          ctx.globalAlpha = 0.6 * (1 - kk);
+          ctx.beginPath(); ctx.arc(cx, cy, 12 + 70 * kk, 0, 2 * Math.PI); ctx.stroke();
+        }
+        ctx.restore();
+        this.requestDraw();
       }
     }
 

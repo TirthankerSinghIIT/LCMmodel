@@ -4,11 +4,13 @@
 import { ARRANGEMENTS, ARRANGEMENT_LABELS, DISTRIBUTION_LABELS, PATTERNS, describeStart, distributionsFor, naturalDistribution, parseCoordinates } from "./start.js";
 
 export const GROUPS = [
+  // Shown only while "Advanced gathering" is the algorithm: its variant, what it fixes and what it guarantees.
+  { id: "algorithm", label: "Advanced gathering", open: true, showIf: (v) => v.family === "advanced", card: true },
   { id: "swarm", label: "Swarm", open: true },
   { id: "start", label: "Start", open: true, describe: true },
   { id: "movement", label: "Movement", open: false },
   { id: "visibility", label: "Visibility", open: true },
-  { id: "model", label: "Robot model", open: false },
+  { id: "model", label: "Robot model · advanced", open: false },
   { id: "faults", label: "Faults", open: false },
   { id: "timing", label: "Scheduler", open: false },
 ];
@@ -24,7 +26,18 @@ const SIZE_LABEL = { square: "Side length", rectangle: "Width", circle: "Diamete
 // values; `note` is a line under the control; `showIf` hides a setting that
 // does not apply; `enabledBy` greys it out; `more` puts it under "More options"
 // (a function of the values, or true).
+/** The algorithms behind "Advanced gathering", as [registry key, label]. */
+export const ADVANCED_VARIANTS = [
+  ["CompassGathering", "Unreliable compasses · 2 robots"],
+  ["RandomizedGathering", "Randomized, λ ∈ {0, ½, 1} · 2 robots"],
+  ["RandomizedGatheringUniform", "Randomized, λ uniform · 2 robots"],
+  ["CrashGathering", "Despite crash faults · weak multiplicity"],
+];
+
 export const SETTINGS = [
+  { key: "variant", group: "algorithm", label: "Variant", kind: "select", value: "CompassGathering", local: true,
+    options: ADVANCED_VARIANTS,
+    hint: "Which advanced gathering algorithm runs. Settings it fixes are locked below, with the reason." },
   { key: "num_of_robots", group: "swarm", label: "Robots", kind: "log", min: 1, max: 10000, value: 500,
     enabledBy: (v) => v.pattern !== "custom",
     hint: "Number of robots. With your own positions it is the number of positions." },
@@ -170,6 +183,7 @@ const LOG_STEPS = 1000;
 const toLog = (n, s) => Math.round((LOG_STEPS * Math.log(n / s.min)) / Math.log(s.max / s.min));
 const fromLog = (v, s) => Math.round(s.min * Math.pow(s.max / s.min, v / LOG_STEPS));
 const decimals = (s) => (String(s.step ?? 1).split(".")[1] ?? "").length;
+const LOCK = `<svg class="lock" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
 const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /** Builds the settings panel into `root`; `onChange(key, values)` fires on every edit. */
@@ -177,6 +191,11 @@ export function buildSettings(root, onChange) {
   const values = Object.fromEntries(SETTINGS.map((s) => [s.key, s.value]));
   const fields = {};
   const mores = []; // per group: its "More options" box
+  const groupBoxes = []; // per group: its <details>, for groups shown only sometimes
+  // Settings the chosen algorithm fixes: key -> { value, reason }. The user's own value is kept in `saved`
+  // and put back when the algorithm no longer fixes it.
+  let frozen = {};
+  const saved = {};
   let summary = null; // the sentence saying what the start settings give
   let customResult = parseCoordinates(values.custom);
   const optionsOf = (s) => (typeof s.options === "function" ? s.options(values) : s.options);
@@ -187,6 +206,8 @@ export function buildSettings(root, onChange) {
     details.open = g.open;
     details.dataset.group = g.id;
     details.innerHTML = `<summary><span class="chev" data-icon="chevron" data-size="14"></span>${g.label}</summary><div class="group-body"></div>`;
+    if (g.card) details.classList.add("algo-group");
+    groupBoxes.push({ group: g, details });
     const body = details.querySelector(".group-body");
     const own = SETTINGS.filter((x) => x.group === g.id);
     for (const s of own) {
@@ -215,6 +236,13 @@ export function buildSettings(root, onChange) {
       if (s.note) field.insertAdjacentHTML("beforeend", `<div class="sub note"></div>`);
       body.append(field);
       fields[s.key] = field;
+    }
+    if (g.card) {
+      // Filled by the page: the variant's guarantee and what it locks.
+      const card = document.createElement("div");
+      card.className = "algo-card";
+      card.id = "algo_card";
+      body.append(card);
     }
     if (g.describe) {
       summary = document.createElement("p");
@@ -319,12 +347,25 @@ export function buildSettings(root, onChange) {
         for (const el of fields[s.key].querySelectorAll("input, select, textarea")) el.disabled = !on;
       }
     }
+    // Frozen settings: shown, locked, with the reason.
+    for (const s of SETTINGS) {
+      const f = fields[s.key], lock = frozen[s.key];
+      f.classList.toggle("frozen", Boolean(lock));
+      let note = f.querySelector(".lock-note");
+      if (lock) {
+        for (const el of f.querySelectorAll("input, select, textarea, button")) el.disabled = true;
+        if (!note) { note = document.createElement("div"); note.className = "sub lock-note"; f.append(note); }
+        note.innerHTML = `${LOCK}<span>${escapeHtml(lock.reason)}</span>`;
+      } else note?.remove();
+    }
+    for (const { group, details } of groupBoxes) if (group.showIf) details.hidden = !group.showIf(values);
     if (summary) summary.textContent = describeStart(values, customResult.points.length);
     fields.num_of_faults.querySelector('input[type="range"]').max = Math.min(1000, values.num_of_robots);
   }
 
   function set(key, v, notify = true) {
     const s = byKey[key];
+    if (frozen[key]) { show(key); return; } // locked by the algorithm
     const before = values.open_world;
     values[key] = clamp(s, v);
     if (key === "open_world" && values.open_world !== before) {
@@ -381,7 +422,36 @@ export function buildSettings(root, onChange) {
     get customPoints() { return customResult.points; },
     /** Sets several settings at once (in the order given) and restarts the run once. */
     apply(entries) { for (const [key, value] of Object.entries(entries)) set(key, value, false); onChange(null, values); },
-    reset() { for (const s of SETTINGS) values[s.key] = s.value; refresh(); for (const s of SETTINGS) show(s.key); refresh(); onChange(null, values); },
+    reset() {
+      for (const s of SETTINGS) values[s.key] = s.value;
+      for (const [key, lock] of Object.entries(frozen)) values[key] = lock.value;
+      refresh(); for (const s of SETTINGS) show(s.key); refresh(); onChange(null, values);
+    },
+    /** Lock settings for the chosen algorithm (`{ key: { value, reason } }`); earlier locks not named here are lifted and
+     * the user's own values come back. Does not restart the run. */
+    freeze(locks) {
+      for (const key of Object.keys(frozen)) {
+        if (!(key in locks) && key in saved) { values[key] = saved[key]; delete saved[key]; }
+      }
+      for (const [key, lock] of Object.entries(locks)) {
+        if (!(key in frozen)) saved[key] = values[key];
+        values[key] = lock.value;
+      }
+      // Two robots from "my own positions" with more points: use a generated start instead.
+      if (locks.num_of_robots && values.pattern === "custom" && customResult.points.length !== locks.num_of_robots.value) {
+        saved.pattern ??= values.pattern;
+        values.pattern = "cloud";
+        values.arrangement = (ARRANGEMENTS.cloud ?? [])[0] ?? values.arrangement;
+        values.distribution = naturalDistribution("cloud", values.arrangement);
+      }
+      frozen = locks;
+      for (const s of SETTINGS) show(s.key);
+      refresh();
+    },
+    get frozen() { return frozen; },
+    /** Extra values the panel's conditions read (e.g. `family`), then re-draw. */
+    setContext(extra) { Object.assign(values, extra); refresh(); },
+    refresh,
   };
 }
 

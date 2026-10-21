@@ -137,11 +137,12 @@ check("simulator: limited visibility runs, with a note that it is an open proble
   await js("!document.getElementById('model_notes').hidden && /open problem/.test(document.getElementById('model_notes').textContent)"),
   await js("document.getElementById('model_notes').textContent"));
 await js(`window.lcm.settings.set("unlimited_visibility", true); window.lcm.settings.set("num_of_faults", 1)`);
-await js("document.getElementById('reset').click()");
-await sleep(400);
-check("simulator: faulty robots are refused with the reason",
-  await js("/faulty/.test(document.getElementById('toast').textContent)"), await js("document.getElementById('toast').textContent"));
-await js(`window.lcm.settings.set("num_of_faults", 0); window.lcm.settings.set("multiplicities", 0)`);
+await sleep(300);
+// Theorem 5 assumes no faulty robots: the setting is locked at 0, with the reason beside it.
+check("simulator: faulty robots are locked at 0 with the reason",
+  await js("window.lcm.settings.values.num_of_faults === 0 && /no faulty robots/.test(document.querySelector('.field[data-key=num_of_faults] .lock-note')?.textContent ?? '')"),
+  await js("document.querySelector('.field[data-key=num_of_faults]')?.textContent"));
+await js(`window.lcm.settings.set("multiplicities", 0)`);
 
 // A new algorithm picked while a run is playing starts at once.
 await js("document.getElementById('reset').click()");

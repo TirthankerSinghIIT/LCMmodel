@@ -32,6 +32,7 @@ const PATHS = {
   follow: '<circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/>',
   grid: '<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/>',
   ruler: '<path d="M3.5 16.5 16.5 3.5l4 4-13 13z"/><path d="m7.2 12.8 2 2M10 10l2 2M12.8 7.2l2 2"/>',
+  trail: '<circle cx="18" cy="6" r="2.4"/><path d="M15.8 7.2C11 9.5 13.5 14 9 15.5S4 17 4 20" stroke-dasharray="2.5 2.5"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
   hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v7.5a6.5 6.5 0 0 1-11.6 4L3.6 14a1.5 1.5 0 0 1 2.3-1.9L8 14"/>',
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',

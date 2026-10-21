@@ -758,6 +758,25 @@ check("10,000 robots: main thread never blocked > 50 ms", perf.maxPauseMs < 50, 
 check("10,000 robots at Max: simulation keeps the worker busy", maxSpeed.eventsPerSecond > 3000 && maxSpeed.busy > 0.85,
   `${maxSpeed.eventsPerSecond} events/s, worker ${Math.round(maxSpeed.busy * 100)} %, ${maxSpeed.fps} fps`);
 
+// The cleaned-up menu, advanced variants with locked settings, and motion trails.
+await js("document.getElementById('playback').value = '20'; document.getElementById('playback').dispatchEvent(new Event('change'))");
+const menu = await js("[...document.querySelectorAll('#algorithm optgroup')].map((g) => g.label)");
+check("the algorithm menu is in four groups", JSON.stringify(menu) === JSON.stringify(["Original simulator", "Sequential gathering", "Advanced gathering", "Other tasks"]), JSON.stringify(menu));
+await js(`(() => { const s = document.getElementById('algorithm'); s.value = 'advanced'; s.dispatchEvent(new Event('change')); })()`);
+await sleep(600);
+const advanced = await js(`({ card: !document.querySelector('.algo-group').hidden, robots: lcm.settings.values.num_of_robots, frames: lcm.settings.values.frames,
+  locked: [...document.querySelectorAll('.field.frozen')].map((f) => f.dataset.key), reason: document.querySelector('.field[data-key=num_of_robots] .lock-note')?.textContent ?? '' })`);
+check("Advanced gathering shows its card and locks two robots with a compass, with the reason",
+  advanced.card && advanced.robots === 2 && advanced.frames === "compass" && advanced.locked.includes("num_of_robots") && /two robots/.test(advanced.reason), JSON.stringify(advanced));
+await js(`(() => { const s = document.getElementById('algorithm'); s.value = 'Gathering'; s.dispatchEvent(new Event('change')); })()`);
+await sleep(600);
+const plain = await js(`({ card: !document.querySelector('.algo-group').hidden, locked: document.querySelectorAll('.field.frozen').length, frames: lcm.settings.values.frames, robots: lcm.settings.values.num_of_robots })`);
+check("back on Center of Gravity: no card, nothing locked, the user's own values back", !plain.card && plain.locked === 0 && plain.frames === "global" && plain.robots !== 2, JSON.stringify(plain));
+await click("#trails");
+const trailsOff = await js("lcm.renderer.options.trails === false && document.getElementById('trails').getAttribute('aria-pressed') === 'false'");
+await click("#trails");
+check("the trails button turns motion trails off and on", trailsOff && (await js("lcm.renderer.options.trails")));
+
 check("no errors in the console", consoleErrors.length === 0, consoleErrors.join(" / "));
 
 await finish();

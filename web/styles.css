@@ -282,6 +282,20 @@ a.btn { text-decoration: none; }
 #model_notes { top: calc(var(--top-h, 56px) + 8px); left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 8px 12px; display: grid; gap: 4px; z-index: 5; border-left: 3px solid var(--accent); font-size: 12.5px; line-height: 1.4; }
 #model_notes .close { justify-self: end; }
 #canvas.editing { cursor: copy; }
+
+/* Settings the algorithm fixes: visible, locked, with the reason. */
+.field.frozen { opacity: 1; }
+.field.frozen input, .field.frozen select { opacity: .6; cursor: not-allowed; }
+.field .lock-note { display: flex; align-items: center; gap: 5px; color: var(--accent); font-size: 11.5px; }
+.field .lock-note .lock { flex: none; }
+/* The "Advanced gathering" card at the top of the settings. */
+.algo-group > summary { color: var(--accent); }
+.algo-card { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--accent-weak); line-height: 1.4; }
+.algo-card .algo-name { font-weight: 650; }
+.algo-card .algo-rule { color: var(--text-2); font-size: 12px; }
+.algo-card .algo-locks { color: var(--accent); font-size: 11.5px; }
+#algorithm optgroup { font-style: normal; color: var(--text-3); }
+#algorithm option { color: var(--text); }
 #canvas.adversary { cursor: pointer; }
 
 /* scale bar in the status panel */
@@ -384,6 +398,20 @@ kbd { color: var(--text); font-family: var(--mono); font-size: 11.5px; padding: 
   #turn_caption, #settings:not([hidden]) ~ #turn_caption { left: 8px; right: 8px; bottom: 112px; width: auto; }
   #inspector { top: calc(var(--hud-bottom, 150px) + 6px); left: 8px; right: 8px; width: auto; }
   .menu { right: 8px; bottom: 64px; }
+  /* The adversary and editor panels and the model notes: full width, above the tools. */
+  .side-panel, #settings:not([hidden]) ~ .side-panel { left: 8px; right: 8px; bottom: 64px; width: auto; max-height: 42vh; overflow: auto; }
+  .adv-actions .btn { flex: 1 1 auto; }
+  /* While the adversary or editor panel is open, it takes the legend's place. */
+  body:has(.side-panel:not([hidden])) #legend { display: none; }
+  #model_notes { left: 8px; right: 8px; transform: none; max-width: none; top: calc(var(--hud-bottom, 150px) + 6px); }
+}
+
+/* Tablets and small laptops: the side panels never run under the settings panel. */
+@media (min-width: 761px) and (max-width: 1219px) {
+  /* Mode panels stop short of the view tools in the bottom right. */
+  .side-panel, #settings:not([hidden]) ~ .side-panel { width: auto; right: 104px; }
+  /* Model notes: under the stats card, in the right-hand column. */
+  #model_notes { left: auto; right: 12px; transform: none; width: 220px; max-width: none; top: calc(var(--hud-bottom, 500px) + 8px); }
 }
 
 /* Touch screens: finger-sized targets. */

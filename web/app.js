@@ -10,7 +10,7 @@ import { COLORS, LOD, Renderer, fmtDistance, ulpOf } from "./renderer.js";
 import { SimClient } from "./client.js";
 import { Inspector } from "./inspector.js";
 import { Overview } from "./overview.js";
-import { buildSettings, readConfig } from "./settings.js";
+import { ADVANCED_VARIANTS, SETTINGS, buildSettings, readConfig } from "./settings.js";
 import { parseCoordinates, startOutline } from "./start.js";
 import { Adversary } from "./adversary.js";
 import { ScenarioEditor } from "./editor.js";
@@ -93,12 +93,13 @@ function showNotes(notes) {
 /* -------------------------------------------------------------- scenarios */
 // A scenario is the algorithm plus every setting: saved as a file, or carried in a link (#scenario=…).
 function scenario() {
-  return { format: "lcm-scenario", version: 1, algorithm: $("algorithm").value, settings: { ...settings.values } };
+  return { format: "lcm-scenario", version: 1, algorithm: algorithmKey(), settings: { ...settings.values } };
 }
 function applyScenario(sc) {
   if (!sc || typeof sc !== "object" || !sc.settings) { toast("That is not a scenario file", true); return; }
-  if (sc.algorithm && algorithms.some((a) => a.key === sc.algorithm)) { $("algorithm").value = sc.algorithm; updateExamples(); }
-  const known = Object.fromEntries(Object.entries(sc.settings).filter(([k]) => k in settings.values));
+  if (sc.algorithm && algorithms.some((a) => a.key === sc.algorithm)) { selectAlgorithm(sc.algorithm); updateExamples(); }
+  const settable = new Set(SETTINGS.map((x) => x.key));
+  const known = Object.fromEntries(Object.entries(sc.settings).filter(([k]) => settable.has(k)));
   settings.apply(known);
   newRun();
   toast("Scenario loaded");
@@ -124,9 +125,83 @@ let resolveReady;
 window.lcm = { renderer, client, settings, parseCoordinates, adversary, editor, stats: {}, ready: new Promise((r) => { resolveReady = r; }),
   get state() { return state; } };
 
+/* -------------------------------------------------------- algorithm menu */
+// The menu in four groups. "Advanced gathering" is one entry: its variant is chosen in the sidebar.
+// "Gathering on a ring" lives on its own page (nodes, not points).
+const MENU = [
+  ["Original simulator", ["Gathering", "SEC", "CircleFormation", "GoToCenter", "Spreading", "TwoTask"]],
+  ["Sequential gathering", ["SqGathering"]],
+  ["Advanced gathering", ["advanced"]],
+  ["Other tasks", ["MutualVisibility", "ring"]],
+];
+const MENU_NAMES = { advanced: "Advanced gathering…", ring: "Gathering on a ring ↗", SqGathering: "SqGathering (Algorithm 8)" };
+const ADVANCED = ADVANCED_VARIANTS.map(([key]) => key);
+/** The registry key of the algorithm that runs: the menu's choice, or the advanced variant. */
+function algorithmKey() {
+  const v = $("algorithm").value;
+  return v === "advanced" ? settings.values.variant : v;
+}
+/** Shows algorithm `key` in the menu (an advanced variant selects "Advanced gathering" and that variant). */
+function selectAlgorithm(key) {
+  if (ADVANCED.includes(key)) { $("algorithm").value = "advanced"; settings.set("variant", key, false); }
+  else $("algorithm").value = key;
+}
+function buildMenu(list) {
+  const known = new Set(list.map((a) => a.key));
+  const name = (key) => MENU_NAMES[key] ?? list.find((a) => a.key === key)?.name ?? key;
+  const listed = new Set(MENU.flatMap(([, keys]) => keys));
+  const groups = MENU.map(([label, keys]) => [label, keys.filter((k) => k === "advanced" || k === "ring" || known.has(k))]);
+  // Anything the core knows that the menu does not place yet still shows up, at the end.
+  const rest = list.map((a) => a.key).filter((k) => !listed.has(k) && !ADVANCED.includes(k));
+  if (rest.length) groups.push(["More", rest]);
+  $("algorithm").innerHTML = groups.filter(([, keys]) => keys.length)
+    .map(([label, keys]) => `<optgroup label="${label}">${keys.map((k) => `<option value="${k}">${name(k)}</option>`).join("")}</optgroup>`).join("");
+}
+
+// What each algorithm fixes, shown locked in the sidebar with the reason (instead of refusing the run).
+const LOCKS = {
+  CompassGathering: {
+    num_of_robots: { value: 2, reason: "Izumi et al.'s algorithm is for two robots" },
+    frames: { value: "compass", reason: "each robot reads its own compass" },
+    num_of_faults: { value: 0, reason: "the paper's robots are not faulty" },
+  },
+  RandomizedGathering: {
+    num_of_robots: { value: 2, reason: "the paper's algorithm is for two robots" },
+    num_of_faults: { value: 0, reason: "the paper's robots are not faulty" },
+  },
+  CrashGathering: {
+    scheduler: { value: "ssync", reason: "Gather_k is proved for SSYNC" },
+    multiplicity: { value: "weak", reason: "it needs weak multiplicity detection" },
+    fault_type: { value: "crash", reason: "it tolerates crash faults only" },
+  },
+  MutualVisibility: {
+    obstructed_visibility: { value: true, reason: "the task exists only when robots block the view" },
+    unlimited_visibility: { value: true, reason: "only other robots block the view" },
+    scheduler: { value: "sequential", reason: "the no-lights algorithm is for a sequential scheduler" },
+  },
+  SqGathering: {
+    num_of_faults: { value: 0, reason: "Theorem 5 assumes no faulty robots" },
+  },
+};
+LOCKS.RandomizedGatheringUniform = LOCKS.RandomizedGathering;
+
+/** Applies the chosen algorithm's locks and fills the algorithm card. */
+function applyAlgorithm() {
+  const key = algorithmKey();
+  settings.setContext({ family: $("algorithm").value === "advanced" ? "advanced" : "plain" });
+  settings.freeze(LOCKS[key] ?? {});
+  const card = $("algo_card");
+  if (card) {
+    const a = algorithms.find((x) => x.key === key);
+    const locks = Object.keys(LOCKS[key] ?? {}).length;
+    card.innerHTML = `<div class="algo-name">${a?.name ?? key}</div><div class="algo-rule">${RULES[key] ?? ""}</div>`
+      + (locks ? `<div class="algo-locks">${locks} setting${locks === 1 ? "" : "s"} locked for this variant (marked below).</div>` : "");
+  }
+}
+
 /* ------------------------------------------------------------ run control */
 function config() {
-  const c = readConfig(settings.values, $("algorithm").value, settings.customPoints);
+  const c = readConfig(settings.values, algorithmKey(), settings.customPoints);
   // Playing the adversary: the run waits for each turn (or round) the user chooses.
   if (adversary.on && c.scheduler === "sequential") { c.schedule = []; c.schedule_end = "await"; delete c.rounds; }
   else if (adversary.on && c.scheduler === "ssync") { c.rounds = []; c.schedule_end = "await"; delete c.schedule; }
@@ -163,6 +238,7 @@ function newRun({ quiet = false, keepView = false } = {}) {
   dirty = false;
   $("dirty").hidden = true;
   client.stop();
+  renderer.clearMotion();
   updatePlaybackOptions();
   client.speed(playbackSpeed());
   client.start(c);
@@ -221,8 +297,9 @@ function updatePlaybackOptions() {
   }
 }
 
-function onSettingChange() {
+function onSettingChange(key) {
   if (state === "loading") return;
+  if (key === "variant") { onAlgorithmChange(); return; }
   updatePlaybackOptions();
   if (state === "ready") {
     clearTimeout(restartTimer);
@@ -271,7 +348,7 @@ const GTC_SEQUENTIAL = { scheduler: "sequential", turn_gap: "none", rigid_moveme
 const TWO_PAIRS = "-64, 0\n-64, 0\n64, 0\n64, 0";
 const PAIR_AND_ONE = "-60, 0\n-60, 0\n60, 0";
 const SQ = { open_world: true, pattern: "custom", turn_gap: "none", robot_speeds: 20, unlimited_visibility: true, num_of_faults: 0, frames: "global", schedule_text: "" };
-const TWO_ROBOTS = ["CompassGathering", "RandomizedGathering", "RandomizedGatheringUniform"];
+const EXAMPLE_BASE = { max_turns: 0, max_rounds: 0, schedule_text: "" };
 const EXAMPLES = {
   SqGathering: [
     { label: "Rendezvous: two robots", note: "κ = 0: the active robot walks to the other one",
@@ -346,7 +423,7 @@ function setLinks(on) {
   $("links").setAttribute("aria-pressed", String(on));
 }
 function renderExamplesMenu() {
-  const list = EXAMPLES[$("algorithm").value] ?? [];
+  const list = EXAMPLES[algorithmKey()] ?? [];
   const items = [{ label: "None", note: "Your own settings" }, ...list];
   $("examples_menu").innerHTML = items.map((e, k) => {
     const on = k - 1 === activeExample;
@@ -358,7 +435,7 @@ function renderExamplesMenu() {
   $("examples").setAttribute("aria-pressed", String(activeExample >= 0));
 }
 function updateExamples() {
-  const list = EXAMPLES[$("algorithm").value];
+  const list = EXAMPLES[algorithmKey()];
   activeExample = -1; // another algorithm: the old choice no longer means anything
   before = null;
   openExamples(false);
@@ -377,7 +454,7 @@ function openExamples(open) {
   (menu.querySelector("[aria-checked=true]") ?? menu.querySelector("[role=menuitemradio]"))?.focus();
 }
 function chooseExample(index) {
-  const list = EXAMPLES[$("algorithm").value] ?? [];
+  const list = EXAMPLES[algorithmKey()] ?? [];
   if (index < 0) {
     if (before) { setLinks(before.links); settings.apply(before.values); }
     before = null;
@@ -385,10 +462,12 @@ function chooseExample(index) {
     const example = list[index];
     before ??= {
       links: renderer.options.links,
-      values: Object.fromEntries([...new Set(list.flatMap((e) => Object.keys(e.set)))].map((key) => [key, settings.values[key]])),
+      values: Object.fromEntries([...new Set([...Object.keys(EXAMPLE_BASE), ...list.flatMap((e) => Object.keys(e.set))])].map((key) => [key, settings.values[key]])),
     };
     setLinks(example.links);
-    settings.apply(example.set);
+    // Limits and explicit schedules belong to the example that sets them: never carried into the next one.
+    settings.apply({ ...EXAMPLE_BASE, ...example.set });
+    settings.freeze(LOCKS[algorithmKey()] ?? {});
   } else return;
   activeExample = index;
   renderExamplesMenu();
@@ -415,7 +494,8 @@ $("examples_menu").addEventListener("keydown", (e) => {
 
 client.on("ready", (list) => {
   algorithms = list;
-  $("algorithm").innerHTML = list.map((a) => `<option value="${a.key}">${a.name}</option>`).join("");
+  buildMenu(list);
+  applyAlgorithm();
   updateExamples();
   $("loading_text").textContent = "Building the swarm…";
   if (location.hash.startsWith("#scenario=")) {
@@ -499,7 +579,7 @@ function updateCaption(f) {
   el.hidden = false;
   endNote = null;
   const who = `<strong>Turn ${(f.turns ?? 0).toLocaleString()}</strong> · Robot ${w.robot}`;  // turn pacing is sequential only
-  const rule = RULES[$("algorithm").value] ?? "";
+  const rule = RULES[algorithmKey()] ?? "";
   el.innerHTML = w.phase === "decide"
     ? `<div class="cap-head">${who} looks and decides</div><div class="cap-body">${rule || "It looks at the others and picks its destination, the ✕."}</div>`
     : `<div class="cap-head">${who} moves</div><div class="cap-body">It walks ${fmtNumber(w.length)} units to the ✕.${w.cut ? " The adversary stops it short of its destination (non-rigid movement)." : ""}</div>`;
@@ -672,26 +752,31 @@ $("play").addEventListener("click", play);
 $("step_event").addEventListener("click", () => step("event"));
 $("step_time").addEventListener("click", () => step("time"));
 $("reset").addEventListener("click", () => newRun());
+let lastMenu = "Gathering";
 $("algorithm").addEventListener("change", () => {
+  if ($("algorithm").value === "ring") {
+    $("algorithm").value = lastMenu; // back to the old choice if the user returns
+    location.href = "web/ring.html";
+    return;
+  }
+  lastMenu = $("algorithm").value;
+  onAlgorithmChange();
+});
+function onAlgorithmChange() {
+  applyAlgorithm();
   updateExamples();
   // An algorithm that only works under the sequential scheduler (SqGathering)
   // switches it on, rather than failing with the async default.
-  const a = algorithms.find((x) => x.key === $("algorithm").value);
+  const a = algorithms.find((x) => x.key === algorithmKey());
   if (a?.sequential_only && (settings.values.scheduler === "async" || settings.values.scheduler === "kasync")) {
     settings.set("scheduler", "sequential", false);
     toast(`${a.name} runs one robot at a time: Scheduler set to Sequential`);
   }
   // Algorithms for exactly two robots open on their first example rather than refusing the swarm on screen.
-  if (TWO_ROBOTS.includes($("algorithm").value) && settings.values.num_of_robots !== 2 && EXAMPLES[$("algorithm").value]) {
-    chooseExample(0);
-    if (state === "ready") newRun({ quiet: true });
-    return;
-  }
   // A new algorithm is a new experiment: start it now, even mid-run.
   if (state === "loading") return;
-  if (state === "ready") onSettingChange();
-  else newRun();
-});
+  newRun({ quiet: true });
+}
 $("playback").addEventListener("change", () => {
   const speed = playbackSpeed();
   client.speed(speed);
@@ -746,6 +831,12 @@ $("hud_zoom_in").addEventListener("click", () => renderer.zoomAt(1.25));
 $("hud_zoom_out").addEventListener("click", () => renderer.zoomAt(0.8));
 $("fit").addEventListener("click", () => renderer.resetView());
 $("grid").addEventListener("click", toggleGrid);
+$("trails").addEventListener("click", toggleTrails);
+function toggleTrails() {
+  renderer.options.trails = !renderer.options.trails;
+  $("trails").setAttribute("aria-pressed", String(renderer.options.trails));
+  renderer.requestDraw();
+}
 function toggleOverview() {
   $("overview").hidden = !$("overview").hidden;
   updateInsets();
@@ -806,7 +897,7 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 async function exportPng() {
-  const name = algorithms.find((a) => a.key === $("algorithm").value)?.name ?? "";
+  const name = algorithms.find((a) => a.key === algorithmKey())?.name ?? "";
   const caption = `LCM simulator · ${name} · ${(frame?.robots ?? 0).toLocaleString()} robots · t = ${(frame?.time ?? 0).toFixed(2)} · seed ${settings.values.random_seed}`;
   download(await renderer.toPngBlob(caption), `${fileStem()}.png`);
   toast("Saved the view as PNG");
@@ -964,6 +1055,7 @@ window.addEventListener("keydown", (e) => {
     f: () => renderer.resetView(), F: toggleFullscreen,
     z: toggleFollow, Z: toggleFollow,
     g: toggleGrid, G: toggleGrid,
+    l: toggleTrails, L: toggleTrails,
     o: toggleOverview, O: toggleOverview,
     m: toggleMeasure, M: toggleMeasure,
     d: () => setEditor(!editor.on), D: () => setEditor(!editor.on),
