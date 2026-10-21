@@ -271,6 +271,7 @@ const GTC_SEQUENTIAL = { scheduler: "sequential", turn_gap: "none", rigid_moveme
 const TWO_PAIRS = "-64, 0\n-64, 0\n64, 0\n64, 0";
 const PAIR_AND_ONE = "-60, 0\n-60, 0\n60, 0";
 const SQ = { open_world: true, pattern: "custom", turn_gap: "none", robot_speeds: 20, unlimited_visibility: true, num_of_faults: 0, frames: "global", schedule_text: "" };
+const TWO_ROBOTS = ["CompassGathering", "RandomizedGathering", "RandomizedGatheringUniform"];
 const EXAMPLES = {
   SqGathering: [
     { label: "Rendezvous: two robots", note: "κ = 0: the active robot walks to the other one",
@@ -293,6 +294,33 @@ const EXAMPLES = {
       set: { open_world: true, pattern: "cloud", num_of_robots: 20, spread: 120, scheduler: "ssync", ssync_probability: 0.3, turn_gap: "none", rigid_movement: true, schedule_text: "" } },
     { label: "Robots block the view", note: "Obstructed visibility, robot radius 4",
       set: { open_world: true, pattern: "line", num_of_robots: 8, size: 300, scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 4, rigid_movement: true } },
+  ],
+  CompassGathering: [
+    { label: "Static compass, φ = 60°", note: "A_SS: guaranteed for φ < 90°; red needles show each robot's north",
+      set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 60, compass_static: true, scheduler: "ssync", turn_gap: "none", robot_speeds: 20, rigid_movement: true, num_of_faults: 0, schedule_text: "" } },
+    { label: "Dynamic compass, SSYNC, φ = 40°", note: "A_SD: guaranteed for φ < 45°",
+      set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 40, compass_static: false, scheduler: "ssync", turn_gap: "none", robot_speeds: 20, rigid_movement: true, num_of_faults: 0, schedule_text: "" } },
+    { label: "Dynamic compass, async, φ = 25°", note: "A_AD: guaranteed for φ < 30° (see docs: an open discrepancy at 29°)",
+      set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 25, compass_static: false, scheduler: "async", robot_speeds: 20, rigid_movement: true, num_of_faults: 0 } },
+  ],
+  RandomizedGathering: [
+    { label: "Mirror images, FSYNC", note: "Both robots see the same picture; only their coins tell them apart",
+      set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, frames: "global", pattern: "custom", custom: "-150, 0\n150, 0", scheduler: "fsync", turn_gap: "none", robot_speeds: 40, rigid_movement: true, num_of_faults: 0 } },
+    { label: "Async", note: "λ ∈ {0, ½, 1} at every Look (Theorem 12)",
+      set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, frames: "global", pattern: "custom", custom: "-150, 0\n150, 0", scheduler: "async", robot_speeds: 40, rigid_movement: true, num_of_faults: 0 } },
+  ],
+  get RandomizedGatheringUniform() { return this.RandomizedGathering; },
+  MutualVisibility: [
+    { label: "Twelve robots in a line", note: "Each sees only its neighbours; after one epoch everyone sees everyone",
+      set: { open_world: true, frames: "global", unlimited_visibility: true, num_of_faults: 0, pattern: "line", num_of_robots: 12, size: 400, distribution: "even", scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 0, robot_speeds: 10, max_turns: 60 } },
+    { label: "A 5 × 5 grid", note: "Rows, columns and diagonals hide robots",
+      set: { open_world: true, frames: "global", unlimited_visibility: true, num_of_faults: 0, pattern: "custom", custom: Array.from({ length: 25 }, (_, k) => `${(k % 5) * 60 - 120}, ${Math.floor(k / 5) * 60 - 120}`).join("\n"), scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 0, robot_speeds: 10, max_turns: 100 } },
+  ],
+  CrashGathering: [
+    { label: "Ten robots, three crashed", note: "The others gather on one point; crashed robots stay where they are",
+      set: { open_world: true, frames: "global", obstructed_visibility: false, unlimited_visibility: true, pattern: "cloud", num_of_robots: 10, spread: 120, num_of_faults: 3, fault_type: "crash", scheduler: "ssync", turn_gap: "none", multiplicity: "weak", robot_speeds: 20, rigid_movement: true, schedule_text: "" } },
+    { label: "Robots in line behind each other", note: "Blocked robots curve off their ray (an approximation of the paper's arcs)",
+      set: { open_world: true, frames: "global", obstructed_visibility: false, unlimited_visibility: true, pattern: "custom", custom: "10, 0\n20, 0\n30, 0\n40, 0\n-40, 0\n0, 35", num_of_faults: 0, scheduler: "ssync", turn_gap: "none", multiplicity: "weak", robot_speeds: 20, rigid_movement: true, schedule_text: "" } },
   ],
   Spreading: [
     { label: "Spreading in a box", note: "Robots start bunched and spread to cover the world",
@@ -364,6 +392,8 @@ function chooseExample(index) {
   } else return;
   activeExample = index;
   renderExamplesMenu();
+  // An example is a new experiment, like a new algorithm: start it now, even after a run has ended.
+  if (state !== "loading" && state !== "ready") newRun();
 }
 $("examples").addEventListener("click", (e) => { e.stopPropagation(); openExamples($("examples_menu").hidden); });
 $("examples_menu").addEventListener("click", (e) => {
@@ -428,6 +458,10 @@ const RULES = {
   SqGathering: "Algorithm 8: with one multiplicity it joins it (or stays on it); with several it leaves its own for the midpoint towards the closest point; with none it goes to the closest robot.",
   Spreading: "It goes to the centre of the area closer to it than to any other robot (its Voronoi cell).",
   TwoTask: "Red robots run SEC, blue robots run Gathering.",
+  CompassGathering: "Izumi et al.: depending on where the other robot is by its own (unreliable) compass, it goes to it, steps west, turns around it, or waits.",
+  RandomizedGathering: "It tosses a coin: stay, go halfway, or go all the way to the other robot.",
+  MutualVisibility: "It makes a small move that leaves every line through itself and another robot, and crosses no line through two robots it sees.",
+  CrashGathering: "It heads for the multiplicity point, or the centre of the smallest enclosing circle; if a robot is in its way it curves around.",
 };
 const fmtNumber = (v) => (v === 0 ? "0" : v >= 1e-3 ? String(+v.toPrecision(3)) : v.toExponential(2));
 let endNote = null;   // "ended", "stalled" or null: which note is up
@@ -646,6 +680,12 @@ $("algorithm").addEventListener("change", () => {
   if (a?.sequential_only && (settings.values.scheduler === "async" || settings.values.scheduler === "kasync")) {
     settings.set("scheduler", "sequential", false);
     toast(`${a.name} runs one robot at a time: Scheduler set to Sequential`);
+  }
+  // Algorithms for exactly two robots open on their first example rather than refusing the swarm on screen.
+  if (TWO_ROBOTS.includes($("algorithm").value) && settings.values.num_of_robots !== 2 && EXAMPLES[$("algorithm").value]) {
+    chooseExample(0);
+    if (state === "ready") newRun({ quiet: true });
+    return;
   }
   // A new algorithm is a new experiment: start it now, even mid-run.
   if (state === "loading") return;
