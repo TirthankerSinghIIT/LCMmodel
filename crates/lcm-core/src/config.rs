@@ -34,6 +34,12 @@ pub enum SchedulerKind {
     Ssync,
     /// Fully synchronous rounds: every live robot is active in every round.
     Fsync,
+    /// Bounded asynchrony (k-Async, Kirkpatrick et al. 2024): as async, but
+    /// while one robot is in a cycle (its Look until the end of its move) no
+    /// other robot starts more than `k_async` Looks; a Look that would is
+    /// put off until that cycle ends.
+    #[cfg_attr(feature = "serde", serde(rename = "kasync"))]
+    KAsync,
 }
 
 impl SchedulerKind {
@@ -231,6 +237,9 @@ pub struct SimConfig {
     pub rounds: Option<Vec<Vec<usize>>>,
     /// SSYNC and FSYNC: stop after this many rounds. `None`: no limit.
     pub max_rounds: Option<u64>,
+    /// k-Async: the most Looks any robot may start while another robot is in
+    /// one cycle (at least 1).
+    pub k_async: u32,
     /// Sequential only: stop after this many turns (`advance` then returns
     /// `MaxTurns`). `None`: no limit.
     pub max_turns: Option<u64>,
@@ -282,6 +291,7 @@ impl Default for SimConfig {
             ssync_fairness: 4,
             rounds: None,
             max_rounds: None,
+            k_async: 1,
             max_turns: None,
             multiplicities: 0,
             multiplicity_size: 0,
@@ -409,6 +419,11 @@ impl SimConfig {
                 "ssync_probability must be in (0, 1], got {}",
                 self.ssync_probability
             )));
+        }
+        if self.k_async == 0 {
+            return Err(ConfigError::Schedule(
+                "k_async must be at least 1".to_owned(),
+            ));
         }
         if self.ssync_fairness == 0 {
             return Err(ConfigError::Schedule(

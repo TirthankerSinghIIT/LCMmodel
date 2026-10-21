@@ -135,6 +135,22 @@ struct Rounds {
     progress: bool,
 }
 
+/// k-Async state: which robots are in a cycle and since when, each robot's
+/// most recent Look times, and the robots whose Look was put off.
+struct Bounded {
+    k: usize,
+    /// Start time of every cycle under way, ordered: `(time bits, robot)`.
+    /// Times are never negative, so their bits sort as the times do.
+    active: std::collections::BTreeSet<(u64, usize)>,
+    started: Vec<Option<f64>>,
+    /// Each robot's last `k` Look times, oldest first.
+    recent: Vec<std::collections::VecDeque<f64>>,
+    deferred: Vec<usize>,
+    waiting: Vec<bool>,
+    /// Looks put off so far (for the page and tests).
+    deferrals: u64,
+}
+
 /// Robot flags as they were when a round began, so every robot of the round
 /// sees the same snapshot.
 #[derive(Default)]
@@ -174,6 +190,8 @@ pub struct Simulation {
     turns: Option<Turns>,
     /// `None` unless the scheduler is SSYNC or FSYNC.
     rounds: Option<Rounds>,
+    /// `None` unless the scheduler is k-Async.
+    bounded: Option<Bounded>,
     snapshot: Option<RoundSnapshot>,
     round_limit: bool,
     /// An `await` schedule has run out and waits for the next activation.
@@ -343,6 +361,15 @@ impl Simulation {
                 seen: vec![false; n],
                 unseen: live,
                 progress: false,
+            }),
+            bounded: (config.scheduler == SchedulerKind::KAsync).then(|| Bounded {
+                k: config.k_async as usize,
+                active: std::collections::BTreeSet::new(),
+                started: vec![None; n],
+                recent: vec![std::collections::VecDeque::new(); n],
+                deferred: Vec::new(),
+                waiting: vec![false; n],
+                deferrals: 0,
             }),
             snapshot: None,
             round_limit: false,
@@ -712,6 +739,8 @@ impl Simulation {
                 }
                 if self.rounds.is_some() {
                     self.round_look(i, t)
+                } else if self.bounded.is_some() && !self.may_look(i, t) {
+                    StepOutcome::Ignored
                 } else {
                     self.look(i, t)
                 }
@@ -1029,6 +1058,9 @@ impl Simulation {
             if self.rounds.is_some() {
                 self.member_done(t, i);
             }
+            if self.bounded.is_some() {
+                self.cycle_done(t, i);
+            }
             return StepOutcome::Terminated;
         }
         if r.frozen[i] {
@@ -1138,6 +1170,9 @@ impl Simulation {
         if self.rounds.is_some() {
             self.member_done(previous, i);
             return;
+        }
+        if self.bounded.is_some() {
+            self.cycle_done(previous, i);
         }
         let delay = self.rng.exponential(1.0 / self.lambda);
         let time = previous + delay.max(1e-9);
@@ -1257,6 +1292,71 @@ impl Simulation {
             robot: robot_id(robot),
             kind: EventKind::Look,
         });
+    }
+
+    /// k-Async: whether robot `i` may start a cycle at `t`. It may not if it
+    /// has already started `k` Looks since the oldest cycle still under way
+    /// began (counting since the oldest start covers every later one); then
+    /// it waits for a cycle to end. Otherwise its cycle starts now.
+    fn may_look(&mut self, i: usize, t: f64) -> bool {
+        let Some(b) = self.bounded.as_mut() else {
+            return true;
+        };
+        let oldest = b
+            .active
+            .iter()
+            .find(|(_, j)| *j != i)
+            .map(|(bits, _)| f64::from_bits(*bits));
+        let recent = &b.recent[i];
+        if let Some(since) = oldest {
+            if recent.len() >= b.k && recent.front().is_some_and(|&first| first >= since) {
+                if !b.waiting[i] {
+                    b.waiting[i] = true;
+                    b.deferred.push(i);
+                }
+                b.deferrals += 1;
+                return false;
+            }
+        }
+        let recent = &mut b.recent[i];
+        recent.push_back(t);
+        if recent.len() > b.k {
+            recent.pop_front();
+        }
+        b.started[i] = Some(t);
+        b.active.insert((t.max(0.0).to_bits(), i));
+        true
+    }
+
+    /// k-Async: robot `i`'s cycle is over. Robots that were put off look
+    /// again now (each checks the bound afresh).
+    fn cycle_done(&mut self, t: f64, i: usize) {
+        let Some(b) = self.bounded.as_mut() else {
+            return;
+        };
+        if let Some(start) = b.started[i].take() {
+            b.active.remove(&(start.max(0.0).to_bits(), i));
+        }
+        for j in std::mem::take(&mut b.deferred) {
+            b.waiting[j] = false;
+            self.queue.push(Event {
+                time: t,
+                robot: robot_id(j),
+                kind: EventKind::Look,
+            });
+        }
+    }
+
+    /// k-Async: Looks put off so far because they would have broken the bound.
+    #[must_use]
+    pub fn deferred_looks(&self) -> u64 {
+        self.bounded.as_ref().map_or(0, |b| b.deferrals)
+    }
+
+    /// k-Async: robots in a cycle right now.
+    #[must_use]
+    pub fn active_cycles(&self) -> usize {
+        self.bounded.as_ref().map_or(0, |b| b.active.len())
     }
 
     /// SSYNC/FSYNC: robot `i` has finished its part of the round; the next
