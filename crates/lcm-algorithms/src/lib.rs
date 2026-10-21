@@ -15,6 +15,7 @@
 
 mod circle_formation;
 pub mod compass_gathering;
+pub mod crash_gathering;
 pub mod mutual_visibility;
 pub mod randomized_gathering;
 mod gathering;
@@ -109,6 +110,11 @@ pub const REGISTRY: &[Entry] = &[
         build: mutual_visibility::plan,
     },
     Entry {
+        key: "CrashGathering",
+        name: "Gathering despite crashes (weak multiplicity)",
+        build: crash_gathering::plan,
+    },
+    Entry {
         key: "SqGathering",
         name: "SqGathering",
         build: sq_gathering::plan,
@@ -120,7 +126,7 @@ pub const REGISTRY: &[Entry] = &[
 #[must_use]
 pub fn requirements(key: &str) -> (bool, bool) {
     match key {
-        "SqGathering" => (true, true),
+        "SqGathering" | "CrashGathering" => (true, true),
         _ => (false, false),
     }
 }
@@ -132,6 +138,7 @@ pub fn notes(key: &str, config: &SimConfig) -> Vec<String> {
     match key {
         "SqGathering" => sq_gathering::notes(config),
         "CompassGathering" => compass_gathering::notes(config),
+        "CrashGathering" => crash_gathering::notes(config),
         "MutualVisibility" => mutual_visibility::notes(config),
         "RandomizedGathering" | "RandomizedGatheringUniform" => randomized_gathering::notes(config),
         _ => Vec::new(),

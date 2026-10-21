@@ -996,7 +996,11 @@ impl Simulation {
             let active = (0..self.view.len())
                 .filter(|&k| !self.view.terminated[k] && self.view.state[k] != RobotState::Crash)
                 .count();
-            if active <= 1 {
+            // The original simulator's rule: a robot that sees no other active
+            // robot is done. Algorithms whose finished robots still matter
+            // (a meeting point to walk to) opt out.
+            let alone_stops = self.algorithms[usize::from(r.algo[i])].stops_when_alone();
+            if active <= 1 && alone_stops {
                 r.frozen[i] = true;
                 r.terminated[i] = true;
                 self.wait(i, t);

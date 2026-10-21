@@ -138,6 +138,14 @@ pub trait Algorithm {
     fn randomized(&self) -> bool {
         false
     }
+
+    /// The core terminates a robot that sees no other robot still active
+    /// (the original simulator's rule). An algorithm for which terminated or
+    /// crashed robots are still where the others must go returns false and
+    /// decides termination itself.
+    fn stops_when_alone(&self) -> bool {
+        true
+    }
 }
 
 /// Colour marking which task a robot was given (TwoTask).
