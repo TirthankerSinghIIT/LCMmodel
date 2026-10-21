@@ -681,8 +681,7 @@ impl Simulation {
         }
         // A round's member that terminated when it computed still has to
         // finish its Look, which ends its part of the round.
-        let decided = self.rounds.as_ref().is_some_and(|r| r.decided[i]);
-        if self.robots.terminated[i] && !decided {
+        if self.robots.terminated[i] && !self.rounds.as_ref().is_some_and(|r| r.decided[i]) {
             return info(StepOutcome::Ignored);
         }
 
@@ -733,6 +732,23 @@ impl Simulation {
         let visibility = self.model.visibility;
         let unlimited = visibility == f64::INFINITY;
         let eps = self.model.eps;
+        if self.snapshot.is_none() && !self.obstructed {
+            // The common case (async and sequential runs): the original loop, kept tight.
+            self.view.clear();
+            let mut me_index = 0;
+            for j in 0..self.robots.len() {
+                let p = self.robots.position_at(j, t, eps);
+                if unlimited || dist(me, p) <= visibility {
+                    if j == i {
+                        me_index = self.view.len();
+                    }
+                    let r = &self.robots;
+                    self.view
+                        .push(robot_id_u32(j), p, r.state[j], r.terminated[j], r.frozen[j]);
+                }
+            }
+            return me_index;
+        }
         if self.obstructed {
             self.positions.clear();
             for j in 0..self.robots.len() {
@@ -918,12 +934,27 @@ impl Simulation {
                 r.terminated[i] = true;
                 self.wait(i, t);
             } else {
-                let mut rng = std::mem::replace(&mut self.rng, Rng::new(0));
-                let mut frame_rng = std::mem::replace(&mut self.frame_rng, Rng::new(0));
-                let (target, terminate, overlay) =
-                    self.compute_in_frame(i, me_index, position, &mut rng, &mut frame_rng);
-                self.rng = rng;
-                self.frame_rng = frame_rng;
+                let (target, terminate, overlay) = if self.frames == Frames::Global {
+                    // The common case, as the original computes it.
+                    let look = Look {
+                        me: robot_id_u32(i),
+                        me_index,
+                        position,
+                        view: &self.view,
+                        model: &self.model,
+                    };
+                    let algorithm = &self.algorithms[usize::from(self.robots.algo[i])];
+                    let d = algorithm.compute(&look, &mut self.rng, &mut self.scratch);
+                    (d.target, d.terminate, d.overlay)
+                } else {
+                    let mut rng = std::mem::replace(&mut self.rng, Rng::new(0));
+                    let mut frame_rng = std::mem::replace(&mut self.frame_rng, Rng::new(0));
+                    let out =
+                        self.compute_in_frame(i, me_index, position, &mut rng, &mut frame_rng);
+                    self.rng = rng;
+                    self.frame_rng = frame_rng;
+                    out
+                };
                 let r = &mut self.robots;
                 r.target[i] = Some(target);
                 match overlay {
