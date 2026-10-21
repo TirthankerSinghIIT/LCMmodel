@@ -46,16 +46,33 @@ the code and the page say so.
   terminates" can be switched off by an algorithm. Without this the last working robot in
   crash-tolerant gathering stopped short of the robots already gathered.
 
+## Findings
+
+1. **A_AD near its bound: slow, not wrong.** Theorem 6 says A_AD gathers for every φ < 30°. Earlier,
+   some runs at φ = 29° had not gathered after 500,000 time units, which looked like a counterexample.
+   Run longer, every one of them gathers:
+
+   | Run (random starts in a 400 × 400 box, speed 20) | Gathered at time | Largest gap on the way |
+   |---|---|---|
+   | rigid, seeds 4, 14, 28 | by 1 × 10⁵ | (no growth) |
+   | rigid, seed 8 | 2.1 × 10⁶ | 6.8 × 10⁵ |
+   | non-rigid (δ = 5), seed 4 | 5.5 × 10⁷ (565 million events) | 3.1 × 10⁷ |
+
+   Why it is slow: when the other robot is in the rotate sector, A_AD moves to the other robot's
+   position turned by 2π/3 + 2φ about itself. At φ = 29° that is 178°, so the robot lands almost
+   opposite and the gap nearly doubles; the trace of rigid seed 8 shows the gap jumping 1.7 × 10⁵ →
+   3.4 × 10⁵ → 6.8 × 10⁵. Each move then takes gap ÷ speed time units, so a few doublings cost a
+   lot of time before a "move onto it" Look lands the robots together. How often this happens grows
+   towards the bound: of 40 random starts, those not gathered by time 20,000 were 0 at 26°, 1 at 27°,
+   2 at 28°, 3 at 28.5°, 4 at 29° and 5 at 29.5° (29.5° is still inside the theorem). Over completed
+   moves the gap grows on average at both 25° and 29° (mean log ratio 0.020 and 0.076); gathering
+   comes from the single Look that moves exactly onto the other robot, not from the gap shrinking.
+   The test `a_ad_at_29_degrees_is_slow_but_gathers` (ignored: about 15 s in release, far longer in a debug build) checks the
+   two slow runs above.
+
 ## Open
 
-1. **A_AD near its bound.** Theorem 6 says A_AD gathers for every φ < 30°. At φ = 29° some runs had
-   not gathered after 500,000 time units (rigid: seed 8; non-rigid with δ = 5: seed 4, gap ~7 × 10⁶),
-   while every seed tried gathers at 25°. The rules were checked against the paper's text. Finite
-   runs cannot tell "never" from "very slow" (the rotate rule turns by almost 180° there). Kept as the
-   ignored test `a_ad_at_29_degrees`: worth raising with the supervisor.
-2. The page's new examples and the ring page have no automated browser checks yet (checked by hand
-   in the browser: every example loads its own start and ends as described).
-3. Not done: Frei & Wada's distinct gathering in the plane (only a brief announcement, rules not
+1. Not done: Frei & Wada's distinct gathering in the plane (only a brief announcement, rules not
    published); Kamei et al.'s ring algorithm (local detection is modelled, their algorithm is not).
 
 ## Try it

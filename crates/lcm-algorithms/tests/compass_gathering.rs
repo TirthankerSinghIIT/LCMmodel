@@ -37,7 +37,7 @@ fn run_for(
     };
     let mut sim = lcm_algorithms::simulation(&config).unwrap();
     sim.advance(Budget {
-        max_events: 20_000_000,
+        max_events: 1_000_000_000,
         until_time: f64::INFINITY,
     });
     let p = &sim.robots().pos;
@@ -86,24 +86,22 @@ fn dynamic_compass_asynchronous_gathers_at_twenty_five_degrees() {
     }
 }
 
-/// OPEN DISCREPANCY, not explained. Theorem 6 of the paper says A_AD gathers
-/// two asynchronous robots with dynamic compasses for every phi < 30 degrees,
-/// rigid or not. At phi = 29 degrees some runs here have not gathered after
-/// 500,000 time units (rigid: seed 8, gap ~6.8e5; non-rigid with delta = 5:
-/// seed 4, gap ~7e6), while every seed tried gathers at 25 degrees. The rules
-/// were checked against the paper's text (sectors, rotation direction, frame
-/// convention). Finite runs cannot tell "never" from "very slow": the rotate
-/// rule turns by 2*pi/3 + 2*phi, almost 180 degrees here, which nearly doubles
-/// the gap. To raise with the paper's authors or the supervisor.
+/// Theorem 6: A_AD gathers two asynchronous robots with dynamic compasses for
+/// every phi < 30 degrees, rigid or not. Near the bound it is very slow: the
+/// rotate rule turns by 2*pi/3 + 2*phi (178 degrees at 29), which nearly
+/// doubles the gap, and each move then takes gap / speed time. These two runs
+/// looked like counterexamples within 500,000 time units; they gather at
+/// 2.1e6 (rigid seed 8, gap up to 6.8e5) and 5.5e7 (non-rigid seed 4, gap up
+/// to 3.1e7). See docs/extras.md, Findings.
 #[test]
-#[ignore = "open discrepancy with Theorem 6; run with --ignored --release"]
-fn a_ad_at_29_degrees() {
+#[ignore = "about 15 s in release, far longer in debug: run with --ignored --release"]
+fn a_ad_at_29_degrees_is_slow_but_gathers() {
     assert!(
-        run(SchedulerKind::Async, 29.0, false, 8, true) < 1e-5,
+        run_for(SchedulerKind::Async, 29.0, false, 8, true, 3e6) < 1e-5,
         "rigid seed 8"
     );
     assert!(
-        run(SchedulerKind::Async, 29.0, false, 4, false) < 1e-5,
+        run_for(SchedulerKind::Async, 29.0, false, 4, false, 6e7) < 1e-5,
         "non-rigid seed 4"
     );
 }
