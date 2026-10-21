@@ -337,6 +337,12 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
         ),
         _ => {}
     }
+    if config.multiplicity == MultiplicityModel::Local {
+        notes.push(
+            "Outside the model: with only local detection a robot cannot count the multiplicities it sees. A robot on a shared point always sees κ = 1 and stays; a robot alone sees κ = 0 and goes to its closest point. So two multiplicities never merge."
+                .to_owned(),
+        );
+    }
     if config.multiplicity == MultiplicityModel::None {
         notes.push(
             "Outside the model: without multiplicity detection gathering is unsolvable under a sequential scheduler (Theorem 4). Every robot takes the κ = 0 branch, and on two points the adversary moves robots back and forth for ever."

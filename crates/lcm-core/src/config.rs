@@ -64,6 +64,9 @@ pub enum MultiplicityModel {
     Weak,
     /// The number of robots on each occupied point.
     Strong,
+    /// Local weak detection (Kamei et al. 2011): a robot knows whether its
+    /// own point holds more than one robot, and nothing about other points.
+    Local,
 }
 
 /// The coordinate system each robot computes in.

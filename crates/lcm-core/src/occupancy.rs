@@ -7,7 +7,8 @@ use crate::geom::{dist, Point};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Occupied {
     pub at: Point,
-    /// More than one robot is here. Always `false` under `None`.
+    /// More than one robot is here. Always `false` under `None`; under
+    /// `Local`, known only for the robot's own point (`false` elsewhere).
     pub multiple: bool,
     /// How many robots are here: `Some` only under `Strong`.
     pub count: Option<usize>,
@@ -23,16 +24,23 @@ pub fn perceive(
     model: MultiplicityModel,
 ) -> (Vec<Occupied>, usize) {
     let (groups, counts, owner) = occupancy(positions, tolerance);
+    let mine = owner.get(me).copied().unwrap_or(0);
     let points = groups
         .into_iter()
         .zip(counts)
-        .map(|(at, c)| Occupied {
+        .enumerate()
+        .map(|(g, (at, c))| Occupied {
             at,
-            multiple: model != MultiplicityModel::None && c >= 2,
+            multiple: c >= 2
+                && match model {
+                    MultiplicityModel::None => false,
+                    MultiplicityModel::Local => g == mine,
+                    MultiplicityModel::Weak | MultiplicityModel::Strong => true,
+                },
             count: (model == MultiplicityModel::Strong).then_some(c),
         })
         .collect();
-    (points, owner.get(me).copied().unwrap_or(0))
+    (points, mine)
 }
 
 /// Distinct locations of `positions` (first-seen order) and how many robots

@@ -382,3 +382,40 @@ fn strong_detection_counts_and_none_hides_multiplicities() {
     let (none, _) = perceive(&positions, 3, 1e-9, MultiplicityModel::None);
     assert!(none.iter().all(|o| !o.multiple && o.count.is_none()));
 }
+
+#[test]
+fn local_detection_sees_only_its_own_point() {
+    use lcm_core::occupancy::perceive;
+    let p = |x, y| Point::new(x, y);
+    let positions = [
+        p(0.0, 0.0),
+        p(0.0, 0.0),
+        p(4.0, 0.0),
+        p(4.0, 0.0),
+        p(9.0, 0.0),
+    ];
+    let (from_pair, _) = perceive(&positions, 0, 1e-9, MultiplicityModel::Local);
+    assert_eq!(
+        from_pair.iter().map(|o| o.multiple).collect::<Vec<_>>(),
+        vec![true, false, false],
+        "its own point only"
+    );
+    let (from_single, _) = perceive(&positions, 4, 1e-9, MultiplicityModel::Local);
+    assert!(from_single.iter().all(|o| !o.multiple && o.count.is_none()));
+}
+
+/// SqGathering with only local detection: robots on each of two
+/// multiplicities see kappa = 1 and hold, so the two never merge, while weak
+/// detection gathers the same start.
+#[test]
+fn sq_gathering_with_local_detection_keeps_two_multiplicities() {
+    let positions = [[0.0, 0.0], [0.0, 0.0], [64.0, 0.0], [64.0, 0.0]];
+    let mut config = base("SqGathering", &positions, SchedulerKind::Sequential);
+    config.multiplicity = MultiplicityModel::Local;
+    let mut s = sim(&config);
+    assert_eq!(run(&mut s), StopReason::Stalled);
+    assert_eq!(census(&s), vec![2, 2]);
+    config.multiplicity = MultiplicityModel::Weak;
+    let mut s = sim(&config);
+    assert_eq!(run(&mut s), StopReason::Ended);
+}
