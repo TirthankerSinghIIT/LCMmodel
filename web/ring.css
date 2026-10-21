@@ -1,0 +1,30 @@
+/* Ring page (ring.html), on top of styles.css and sqgathering.css. */
+.ring-main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr); gap: 16px; }
+@media (max-width: 900px) { .ring-main { grid-template-columns: 1fr; } }
+#ring { width: 100%; max-height: 62vh; display: block; margin: 8px auto 0; touch-action: manipulation; user-select: none; }
+#ring .edge { stroke: var(--text-3); stroke-width: 1.5; fill: none; opacity: .5; }
+#ring .node { fill: var(--surface-solid); stroke: var(--text-3); stroke-width: 1.5; cursor: pointer; }
+#ring .node.occupied { stroke: var(--text); stroke-width: 2; }
+#ring .node.hole-big { fill: var(--sg-multi-weak); }
+#ring .node:hover { stroke: var(--accent); }
+#ring .robot { fill: var(--sg-single); }
+#ring .robot.next { fill: var(--sg-active); }
+#ring .count { font: 600 11px system-ui, sans-serif; fill: var(--surface-solid); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+#ring .label { font: 10px system-ui, sans-serif; fill: var(--text-3); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+#ring .ids { font: 600 10.5px system-ui, sans-serif; fill: var(--text-2); text-anchor: middle; pointer-events: none; }
+#ring .arrow { stroke: var(--sg-active); stroke-width: 3; fill: none; marker-end: url(#tip); }
+#ring .ring-gathered { fill: var(--sg-ok); }
+.ring-status { text-align: center; color: var(--text-2); margin-top: 4px; min-height: 2.6em; line-height: 1.35; }
+.ring-status strong { color: var(--text); }
+.ring-side h3 { margin: 4px 0 8px; font-size: 13px; }
+.ring-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 12px; }
+.ring-facts dt { color: var(--text-2); }
+.ring-facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.ring-warning { border-left: 3px solid var(--danger); padding: 6px 10px; margin-bottom: 12px; color: var(--text-2); line-height: 1.4; }
+.ring-table-wrap { max-height: 46vh; overflow: auto; }
+.ring-trace { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ring-trace th, .ring-trace td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.ring-trace tr.moved td:nth-child(4) { color: var(--sg-active); font-weight: 600; }
+.ring-help { display: block; margin-top: 6px; color: var(--text-3); }
+.controls input[type="number"] { width: 64px; }
+.controls input[type="text"] { width: 120px; }

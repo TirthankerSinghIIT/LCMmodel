@@ -21,6 +21,74 @@ export const Stop = Object.freeze({
     AwaitingSchedule: 9, "9": "AwaitingSchedule",
 });
 
+/**
+ * A ring run, stepped by the page one activation at a time.
+ */
+export class WasmRing {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        WasmRingFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_wasmring_free(ptr, 0);
+    }
+    /**
+     * `config_json` is a `RingConfig`.
+     *
+     * # Errors
+     * Malformed JSON or an invalid ring.
+     * @param {string} config_json
+     */
+    constructor(config_json) {
+        const ptr0 = passStringToWasm0(config_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmring_new(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0];
+        WasmRingFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * The run now, as JSON: positions, status, counts, the task every robot
+     * would take, the next robot and what it would do.
+     * @returns {string}
+     */
+    state() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.wasmring_state(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * One activation as JSON (`null` once the run is over).
+     * @returns {string}
+     */
+    step() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.wasmring_step(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) WasmRing.prototype[Symbol.dispose] = WasmRing.prototype.free;
+
 export class WasmSimulation {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -660,6 +728,9 @@ function __wbg_get_imports() {
     };
 }
 
+const WasmRingFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_wasmring_free(ptr, 1));
 const WasmSimulationFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_wasmsimulation_free(ptr, 1));

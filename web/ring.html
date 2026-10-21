@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ring gathering · LCM Simulator</title>
+  <meta name="description" content="GatheRRing (Navarra and Piselli): oblivious robots on a ring of nodes gather under a round-robin scheduler, turn by turn.">
+  <script>
+    (() => {
+      let t = "system";
+      try { t = localStorage.getItem("lcm-theme") || "system"; } catch {}
+      if (t !== "system") document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="sqgathering.css">
+  <link rel="stylesheet" href="ring.css">
+</head>
+<body class="sqg">
+  <header class="sqg-bar">
+    <a class="btn" href="../" title="Back to the simulator"><span data-icon="logo" data-size="20"></span><span class="brand-name">LCM</span></a>
+    <span class="crumb">Gathering on a ring <span class="crumb-sub">GatheRRing · round robin · no multiplicity detection</span></span>
+    <span class="spacer"></span>
+    <button id="theme" class="btn" title="Theme" aria-label="Theme"><span data-icon="moon"></span></button>
+  </header>
+
+  <p class="sqg-note">
+    Robots sit on the nodes of a ring and see only <strong>which nodes are occupied</strong>: never how many robots a node holds.
+    They have no sense of direction. The round-robin scheduler activates them one at a time in a fixed order they do not know;
+    an activated robot stays or steps to a neighbouring node. Algorithm <em>GatheRRing</em> (Navarra &amp; Piselli, arXiv:2502.03939)
+    gathers them from every start outside the unsolvable set, in at most n − 3 epochs.
+    <span class="ring-help">Click a node to add a robot; right-click (or long-press) to remove one.</span>
+  </p>
+
+  <div class="sqg-main ring-main">
+    <section class="sqg-stage panel-card" aria-label="The ring">
+      <div class="controls" role="toolbar" aria-label="Playback">
+        <label class="field compact"><span>Preset</span><select id="preset"></select></label>
+        <label class="field compact"><span>Nodes</span><input id="nodes" type="number" min="3" max="60" value="9"></label>
+        <label class="field compact"><span>Order</span><input id="order" type="text" placeholder="0, 1, 2, …" spellcheck="false"></label>
+        <label class="field compact"><span>Choices left open</span>
+          <select id="ties"><option value="next">Towards the next node</option><option value="random">At random (seed)</option></select>
+        </label>
+        <span class="spacer"></span>
+        <button id="reset" class="btn" title="Back to the start"><span data-icon="reset"></span><span class="label">Reset</span></button>
+        <button id="step" class="btn" title="One activation (→)"><span data-icon="stepEvent"></span><span class="label">Step</span></button>
+        <button id="play" class="btn primary" title="Play (Space)"><span data-icon="play"></span><span class="label">Play</span></button>
+        <select id="speed" aria-label="Speed"><option value="1200">Slow</option><option value="500" selected>Normal</option><option value="120">Fast</option></select>
+        <button id="clear" class="btn outline" title="Remove every robot">Clear</button>
+      </div>
+      <svg id="ring" viewBox="-160 -160 320 320" role="img" aria-label="Ring of nodes with robots"></svg>
+      <div id="ring_status" class="ring-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="panel-card ring-side" aria-label="What happens">
+      <h3>Now</h3>
+      <dl id="facts" class="ring-facts"></dl>
+      <div id="warning" class="ring-warning" hidden></div>
+      <h3>Turns</h3>
+      <div class="ring-table-wrap"><table id="trace" class="ring-trace"><thead><tr><th>#</th><th>Epoch</th><th>Robot</th><th>Move</th><th>Task</th><th>Rule</th></tr></thead><tbody></tbody></table></div>
+    </section>
+  </div>
+
+  <script type="module" src="ring.js"></script>
+</body>
+</html>

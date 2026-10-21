@@ -256,7 +256,7 @@ pub fn step(&mut self) -> StepInfo {
 }
 ```
 
-`schedule_activation` — [`crates/lcm-core/src/sim.rs:1165`](../crates/lcm-core/src/sim.rs#L1165)
+`schedule_activation` — [`crates/lcm-core/src/sim.rs:1169`](../crates/lcm-core/src/sim.rs#L1169)
 
 ```rust
 /// `Scheduler.generate_event`: the random delay is drawn even when a
@@ -301,7 +301,7 @@ fn look(&mut self, i: usize, t: f64) -> StepOutcome {
 }
 ```
 
-`wait` — [`crates/lcm-core/src/sim.rs:1141`](../crates/lcm-core/src/sim.rs#L1141)
+`wait` — [`crates/lcm-core/src/sim.rs:1145`](../crates/lcm-core/src/sim.rs#L1145)
 
 ```rust
 /// `Robot.wait`.
@@ -329,7 +329,7 @@ fn wait(&mut self, i: usize, t: f64) {
 }
 ```
 
-`globally_terminated` — [`crates/lcm-core/src/sim.rs:1493`](../crates/lcm-core/src/sim.rs#L1493)
+`globally_terminated` — [`crates/lcm-core/src/sim.rs:1497`](../crates/lcm-core/src/sim.rs#L1497)
 
 ```rust
 /// `Scheduler._check_global_termination`: every robot that is neither
@@ -537,7 +537,7 @@ fn compute(&self, look: &Look<'_>, _: &mut Rng, _: &mut Scratch) -> Decision {
 }
 ```
 
-`schedule_activation` — [`crates/lcm-core/src/sim.rs:1165`](../crates/lcm-core/src/sim.rs#L1165)
+`schedule_activation` — [`crates/lcm-core/src/sim.rs:1169`](../crates/lcm-core/src/sim.rs#L1169)
 
 ```rust
 /// `Scheduler.generate_event`: the random delay is drawn even when a
@@ -572,7 +572,7 @@ fn schedule_activation(&mut self, previous: f64, i: usize) {
 }
 ```
 
-`begin_move` — [`crates/lcm-core/src/sim.rs:1076`](../crates/lcm-core/src/sim.rs#L1076)
+`begin_move` — [`crates/lcm-core/src/sim.rs:1080`](../crates/lcm-core/src/sim.rs#L1080)
 
 ```rust
 /// `Robot.move` and the WAIT scheduling that follows it.
@@ -612,7 +612,7 @@ fn begin_move(&mut self, i: usize, t: f64) -> StepOutcome {
 }
 ```
 
-`wait` — [`crates/lcm-core/src/sim.rs:1141`](../crates/lcm-core/src/sim.rs#L1141)
+`wait` — [`crates/lcm-core/src/sim.rs:1145`](../crates/lcm-core/src/sim.rs#L1145)
 
 ```rust
 /// `Robot.wait`.
@@ -1405,7 +1405,7 @@ flowchart TD
 | Stop it on the way | The adversary picks the stopping point, never before δ along the way: just after δ, anywhere between δ and the destination at random, a set fraction of the way, or the fraction this turn of the schedule names. |
 | Arrive, and the turn ends | The robot stands at its destination, or at the point where it was stopped. It does not schedule its own next Look: control goes back to next_turn(). |
 
-`next_turn` — [`crates/lcm-core/src/sim.rs:1196`](../crates/lcm-core/src/sim.rs#L1196)
+`next_turn` — [`crates/lcm-core/src/sim.rs:1200`](../crates/lcm-core/src/sim.rs#L1200)
 
 ```rust
 /// Sequential scheduler: queues the Look of the next robot to take a turn:
@@ -1513,7 +1513,7 @@ fn next_turn(&mut self, previous: f64) {
 }
 ```
 
-`limited_target` — [`crates/lcm-core/src/sim.rs:1112`](../crates/lcm-core/src/sim.rs#L1112)
+`limited_target` — [`crates/lcm-core/src/sim.rs:1116`](../crates/lcm-core/src/sim.rs#L1116)
 
 ```rust
 /// Non-rigid movement with a `delta`: where the adversary stops robot `i`
