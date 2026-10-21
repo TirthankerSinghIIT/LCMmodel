@@ -329,7 +329,7 @@ fn wait(&mut self, i: usize, t: f64) {
 }
 ```
 
-`globally_terminated` — [`crates/lcm-core/src/sim.rs:1497`](../crates/lcm-core/src/sim.rs#L1497)
+`globally_terminated` — [`crates/lcm-core/src/sim.rs:1512`](../crates/lcm-core/src/sim.rs#L1512)
 
 ```rust
 /// `Scheduler._check_global_termination`: every robot that is neither
@@ -798,7 +798,7 @@ requestFrame() {
 }
 ```
 
-`slice` — [`web/worker.js:188`](../web/worker.js#L188)
+`slice` — [`web/worker.js:190`](../web/worker.js#L190)
 
 ```js
 function slice(gen) {
@@ -845,7 +845,7 @@ pub fn advance(&mut self, max_events: u32, until_time: f64) -> Stop {
 }
 ```
 
-`postFrame` — [`web/worker.js:223`](../web/worker.js#L223)
+`postFrame` — [`web/worker.js:225`](../web/worker.js#L225)
 
 ```js
 function postFrame(extra = {}) {
@@ -871,6 +871,8 @@ function postFrame(extra = {}) {
     awaiting: sim.awaiting_schedule(),
     compass: n <= 2000 && sim.compass ? Array.from(sim.compass()) : null,
     deferred: sim.deferred_looks ? sim.deferred_looks() : 0,
+    // Mutual visibility, once the run is over: how many robots see all the others (a Look each, so only then).
+    seeing: mutualVisibility && stop !== "running" ? (seeing ??= sim.seeing_everyone()) : null,
     // While a turn is played one at a time: who is walking, in which beat, how far, and the settle time.
     walk: perTurn !== null && pace
       ? { robot: pace.robot, phase: pace.progress < 0 ? "decide" : "move", length: pace.length, cut: pace.cut,
@@ -889,7 +891,7 @@ function postFrame(extra = {}) {
 }
 ```
 
-`fill_frame` — [`crates/lcm-wasm/src/lib.rs:426`](../crates/lcm-wasm/src/lib.rs#L426)
+`fill_frame` — [`crates/lcm-wasm/src/lib.rs:432`](../crates/lcm-wasm/src/lib.rs#L432)
 
 ```rust
 /// Captures the current state straight into caller-owned arrays, so the

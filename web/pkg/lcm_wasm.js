@@ -415,6 +415,14 @@ export class WasmSimulation {
         return ret;
     }
     /**
+     * How many robots see every other robot right now (mutual visibility).
+     * @returns {number}
+     */
+    seeing_everyone() {
+        const ret = wasm.wasmsimulation_seeing_everyone(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * `true` under the sequential scheduler.
      * @returns {boolean}
      */

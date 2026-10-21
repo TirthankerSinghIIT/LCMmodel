@@ -1354,6 +1354,21 @@ impl Simulation {
         }
     }
 
+    /// How many robots see every other robot right now, with the run's
+    /// visibility radius and obstruction (mutual visibility is reached when
+    /// all of them do). Costs a Look per robot.
+    pub fn seeing_everyone(&mut self) -> usize {
+        let (n, t) = (self.robots.len(), self.now);
+        let mut count = 0;
+        for i in 0..n {
+            self.build_view(i, t);
+            if self.view.len() == n {
+                count += 1;
+            }
+        }
+        count
+    }
+
     /// k-Async: Looks put off so far because they would have broken the bound.
     #[must_use]
     pub fn deferred_looks(&self) -> u64 {

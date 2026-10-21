@@ -237,6 +237,12 @@ impl WasmSimulation {
         js_sys::Float64Array::from(self.sim.compass_deviations())
     }
 
+    /// How many robots see every other robot right now (mutual visibility).
+    #[allow(clippy::cast_precision_loss)]
+    pub fn seeing_everyone(&mut self) -> f64 {
+        self.sim.seeing_everyone() as f64
+    }
+
     /// k-Async: Looks put off so far because they would have broken the bound.
     #[must_use]
     #[allow(clippy::cast_precision_loss)]

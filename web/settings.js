@@ -30,7 +30,7 @@ const SIZE_LABEL = { square: "Side length", rectangle: "Width", circle: "Diamete
 export const ADVANCED_VARIANTS = [
   ["CompassGathering", "Unreliable compasses · 2 robots"],
   ["RandomizedGathering", "Randomized, λ ∈ {0, ½, 1} · 2 robots"],
-  ["RandomizedGatheringUniform", "Randomized, λ uniform · 2 robots"],
+  ["RandomizedGatheringUniform", "Randomized, λ ∈ {1, ½, uniform} · 2 robots"],
   ["CrashGathering", "Despite crash faults · weak multiplicity"],
 ];
 

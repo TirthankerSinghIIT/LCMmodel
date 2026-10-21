@@ -66,6 +66,8 @@ const ready = (async () => {
 let sim = null;
 let playing = false;
 let stop = "running";
+let mutualVisibility = false; // the run is MutualVisibility: count who sees everyone once it is over
+let seeing = null;            // that count, worked out once per run
 let speed = Infinity;           // simulated time units per wall second
 let anchor = { wall: 0, sim: 0 };
 let perTurn = null;             // seconds each walk takes, in turn-paced playback; null otherwise
@@ -243,6 +245,8 @@ function postFrame(extra = {}) {
     awaiting: sim.awaiting_schedule(),
     compass: n <= 2000 && sim.compass ? Array.from(sim.compass()) : null,
     deferred: sim.deferred_looks ? sim.deferred_looks() : 0,
+    // Mutual visibility, once the run is over: how many robots see all the others (a Look each, so only then).
+    seeing: mutualVisibility && stop !== "running" ? (seeing ??= sim.seeing_everyone()) : null,
     // While a turn is played one at a time: who is walking, in which beat, how far, and the settle time.
     walk: perTurn !== null && pace
       ? { robot: pace.robot, phase: pace.progress < 0 ? "decide" : "move", length: pace.length, cut: pace.cut,
@@ -291,6 +295,8 @@ self.onmessage = async ({ data }) => {
       case "start":
         sim?.free();
         sim = new wasm.WasmSimulation(JSON.stringify(data.config));
+        mutualVisibility = data.config.algorithm === "MutualVisibility";
+        seeing = null;
         run = data.run ?? run + 1;
         playing = false;
         stop = "running";

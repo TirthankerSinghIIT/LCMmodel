@@ -76,3 +76,27 @@ fn a_grid_ends_up_seeing_itself() {
     let (_, later) = run(grid, 10);
     assert!(all_see_all(&later));
 }
+
+#[test]
+fn the_core_counts_who_sees_everyone() {
+    let config = SimConfig {
+        algorithm: "MutualVisibility".to_owned(),
+        num_of_robots: 3,
+        initial_positions: Some(vec![[0.0, 0.0], [10.0, 0.0], [20.0, 0.0]]),
+        scheduler: SchedulerKind::Sequential,
+        obstructed_visibility: true,
+        ..SimConfig::default()
+    };
+    let mut sim = lcm_algorithms::simulation(&config).unwrap();
+    // The ends hide each other; only the middle robot sees both.
+    assert_eq!(sim.seeing_everyone(), 1);
+    let (_, points) = run(vec![[0.0, 0.0], [10.0, 0.0], [20.0, 0.0]], 4);
+    let all = (0..3).all(|i| (0..3).all(|j| i == j || !blocked(&points, i, j, 1e-9)));
+    assert!(all, "after four epochs every robot sees the others");
+    let config = SimConfig {
+        initial_positions: Some(points.iter().map(|p| [p.x, p.y]).collect()),
+        ..config
+    };
+    let mut sim = lcm_algorithms::simulation(&config).unwrap();
+    assert_eq!(sim.seeing_everyone(), 3);
+}

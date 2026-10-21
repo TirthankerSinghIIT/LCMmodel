@@ -538,15 +538,17 @@ const RULES = {
   SqGathering: "Algorithm 8: with one multiplicity it joins it (or stays on it); with several it leaves its own for the midpoint towards the closest point; with none it goes to the closest robot.",
   Spreading: "It goes to the centre of the area closer to it than to any other robot (its Voronoi cell).",
   TwoTask: "Red robots run SEC, blue robots run Gathering.",
+  CircleFormation: "Off the circle (centred on the swarm, at its mean radius), it steps onto it; on it, it slides to halfway between its two neighbours, so the robots end up evenly spaced.",
   CompassGathering: "Izumi et al.: depending on where the other robot is by its own (unreliable) compass, it goes to it, steps west, turns around it, or waits.",
   RandomizedGathering: "It tosses a coin: stay, go halfway, or go all the way to the other robot.",
+  RandomizedGatheringUniform: "It picks one of three moves at random: all the way to the other robot, halfway, or a uniformly random fraction of the way (Theorem 3).",
   MutualVisibility: "It makes a small move that leaves every line through itself and another robot, and crosses no line through two robots it sees.",
   CrashGathering: "It heads for the multiplicity point, or the centre of the smallest enclosing circle; if a robot is in its way it curves around.",
 };
 const fmtNumber = (v) => (v === 0 ? "0" : v >= 1e-3 ? String(+v.toPrecision(3)) : v.toExponential(2));
 let endNote = null;   // "ended", "stalled" or null: which note is up
 let stepOfNumbers = 0; // the gap between neighbouring numbers where the swarm is, set from the frame
-function showEndNote(kind) {
+function showEndNote(kind, f = renderer.frame) {
   endNote = kind;
   const el = $("turn_caption");
   el.hidden = !kind;
@@ -554,8 +556,12 @@ function showEndNote(kind) {
   const points = trace.points, size = points.length ? points[points.length - 1] : 0;
   const zoomed = renderer.zoom > 20 ? ` This view is zoomed in ${fmtZoomWords(renderer.zoom)} times; the grid and the scale bar show the real size.` : "";
   let html;
-  if (kind === "ended") {
-    html = `<div class="cap-head">Finished: every robot has terminated</div><div class="cap-body">Grey robots have terminated. The swarm is ${fmtSize(size)} units across (from its centre to its farthest robot).${zoomed}</div>`;
+  if (kind === "stalled" && f?.seeing != null) {
+    const all = f.seeing === f.robots;
+    html = `<div class="cap-head">${all ? "Mutual visibility reached" : "Stopped before mutual visibility"}</div><div class="cap-body">${f.seeing} of ${f.robots} robots see every other robot. This algorithm never terminates: the run stops once a whole round passes in which every robot's next move is too small to make (shorter than ε).${all ? "" : " Some robots are still hidden behind others: a lower precision (larger ε) or a turn limit changes where it stops."}${zoomed}</div>`;
+  } else if (kind === "ended") {
+    const left = f ? f.robots - f.terminated : 0; // crashed and Byzantine robots never terminate
+    html = `<div class="cap-head">Finished: every ${left ? "working " : ""}robot has terminated</div><div class="cap-body">Grey robots have terminated.${left ? ` The other ${left} are faulty (crashed or Byzantine) and do not terminate.` : ""} The swarm is ${fmtSize(size)} units across (from its centre to its farthest robot).${zoomed}</div>`;
   } else {
     // Stalled: a whole round in which no robot could move or finish. Often the numbers have run out: a robot's
     // destination rounds to the spot where it already stands.
@@ -573,7 +579,7 @@ function updateCaption(f) {
     // A run that is over, in a view that is zoomed in on the swarm or played a turn at a time: say so, because
     // grey robots a long way apart on screen can look like a failure when they are a hair apart in fact.
     stepOfNumbers = ulpOf(Math.max(Math.abs(f.originX ?? 0), Math.abs(f.originY ?? 0)));
-    showEndNote(f.stop === "stalled" ? "stalled" : f.ended && (renderer.follow || typeof playbackSpeed() === "object") ? "ended" : null);
+    showEndNote(f.stop === "stalled" ? "stalled" : f.ended && (renderer.follow || typeof playbackSpeed() === "object") ? "ended" : null, f);
     return;
   }
   el.hidden = false;
@@ -692,7 +698,8 @@ function updateHud(force = false) {
   if (now - fpsAt >= 1000) { fps = (draws * 1000) / (now - fpsAt); draws = 0; fpsAt = now; }
   let statusText = {
     loading: "Loading…", ready: "Ready", running: "Running", paused: "Paused",
-    ended: frame?.ended ? "Ended · all terminated"
+    ended: frame?.ended ? (frame.terminated < frame.robots ? `Ended · ${frame.terminated} of ${frame.robots} terminated, the rest faulty` : "Ended · all terminated")
+      : frame?.stop === "stalled" && frame.seeing != null ? `Stopped · ${frame.seeing} of ${frame.robots} see everyone`
       : frame?.stop === "stalled" ? "Stalled · nothing can move any more"
       : frame?.stop === "max-turns" ? "Stopped · turn limit reached"
       : frame?.stop === "max-rounds" ? "Stopped · round limit reached" : `Stopped (${frame?.stop})`,

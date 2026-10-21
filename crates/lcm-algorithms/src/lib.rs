@@ -32,7 +32,9 @@ pub use sec::Sec;
 pub use spreading::Spreading;
 pub use sq_gathering::SqGathering;
 
-use lcm_core::{Algorithm, Assignment, ConfigError, Plan, SimConfig, Simulation, TaskColor};
+use lcm_core::{
+    Algorithm, Assignment, ConfigError, Plan, SchedulerKind, SimConfig, Simulation, TaskColor,
+};
 
 /// A selectable entry: key (as sent by the UI), display name, plan builder.
 pub struct Entry {
@@ -101,7 +103,7 @@ pub const REGISTRY: &[Entry] = &[
     },
     Entry {
         key: "RandomizedGatheringUniform",
-        name: "Randomized gathering, λ uniform (two robots)",
+        name: "Randomized gathering, λ ∈ {1, ½, uniform} (two robots)",
         build: randomized_gathering::plan_uniform,
     },
     Entry {
@@ -141,6 +143,12 @@ pub fn notes(key: &str, config: &SimConfig) -> Vec<String> {
         "CrashGathering" => crash_gathering::notes(config),
         "MutualVisibility" => mutual_visibility::notes(config),
         "RandomizedGathering" | "RandomizedGatheringUniform" => randomized_gathering::notes(config),
+        "TwoTask" => vec![
+            "The run does not end by itself: the Gathering robots head for the centre of the swarm while the SEC robots head for the edge of its circle, so the two groups keep pulling on each other until the run stalls or reaches a limit.".to_owned(),
+        ],
+        "CircleFormation" if config.scheduler == SchedulerKind::Fsync => vec![
+            "Under FSYNC every robot moves at once, so the circle each one aims for moves with them: some starts never settle (in testing, 4 of 12 starts with 10 or 30 robots ran until the event limit). SSYNC, sequential and async runs settle.".to_owned(),
+        ],
         _ => Vec::new(),
     }
 }
