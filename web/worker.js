@@ -31,7 +31,8 @@
  *   {type: "frame", buffers?}        reply with the current frame (refilling `buffers`)
  *   {type: "step", unit, amount}     paused stepping: unit "event" (amount events)
  *                                    or "time" (amount time units); reply with a frame
- *   {type: "inspect", id, seq}       reply {type: "robot", id, seq, info}
+ *   {type: "inspect", id, seq}       reply {type: "robot", id, seq, info}; info.why: what the robot
+ *                                    would see and the rule it would apply if it looked now (≤ 2,000 robots)
  *   {type: "csv"}                    reply {type: "csv", text}
  *   {type: "turn", robot, stop?}     adversary (sequential, schedule_end "await"): add a turn for
  *                                    `robot`, stopped after `stop` of the way, and play it
@@ -325,7 +326,12 @@ self.onmessage = async ({ data }) => {
         if (sim && stop === "running") step(data.unit, data.amount ?? 1);
         break;
       case "inspect":
-        if (sim) self.postMessage({ type: "robot", id: data.id, seq: data.seq, info: JSON.parse(sim.robot_info(data.id)) });
+        if (sim) {
+          const info = JSON.parse(sim.robot_info(data.id));
+          // A Look costs a pass over the swarm (more for some algorithms): only for small swarms.
+          if (info && sim.robot_count() <= 2000) info.why = sim.explain(data.id) ?? null;
+          self.postMessage({ type: "robot", id: data.id, seq: data.seq, info });
+        }
         break;
       case "turn":
       case "round":

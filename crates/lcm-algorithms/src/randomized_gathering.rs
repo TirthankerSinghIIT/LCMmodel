@@ -84,6 +84,29 @@ impl Algorithm for RandomizedGathering {
             overlay: OverlayUpdate::Keep,
         }
     }
+
+    fn explain(&self, look: &Look<'_>, _: &mut Scratch) -> Option<String> {
+        let me = look.position;
+        let q = (0..look.view.len())
+            .find(|&k| k != look.me_index)
+            .map(|k| look.view.pos[k])?;
+        let gap = libm::hypot(q.x - me.x, q.y - me.y);
+        if gap <= look.model.eps {
+            return Some(
+                "The other robot is on its point: they have gathered, so it terminates.".to_owned(),
+            );
+        }
+        let coin = match self.choice {
+            Choice::ZeroHalfOne => "stay, go halfway or go all the way (λ ∈ {0, ½, 1}, Theorem 12)",
+            Choice::OneHalfUniform => {
+                "go all the way, halfway or a uniformly random fraction of the way (λ ∈ {1, ½, U(0, 1)}, Theorem 3)"
+            }
+        };
+        Some(format!(
+            "The other robot is {} units away. At its Look it tosses a three-sided coin: {coin}.",
+            crate::num(gap)
+        ))
+    }
 }
 
 fn two_robots(config: &SimConfig, name: &str) -> Result<(), ConfigError> {

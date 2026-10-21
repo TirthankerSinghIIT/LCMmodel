@@ -121,6 +121,31 @@ pub fn arc_step(p: Point, c: Point, others: &[Point], eps: f64) -> Point {
     Point::new(o.x + r * libm::cos(m), o.y + r * libm::sin(m))
 }
 
+impl CrashGathering {
+    /// Adds to `text` that a robot stands in the way to `target`, if one does.
+    fn blocked_note(
+        self,
+        me: Point,
+        target: Point,
+        occupied: &[lcm_core::occupancy::Occupied],
+        mine: usize,
+        eps: f64,
+        text: &mut String,
+    ) {
+        let others: Vec<Point> = occupied
+            .iter()
+            .enumerate()
+            .filter(|&(k, _)| k != mine)
+            .map(|(_, o)| o.at)
+            .collect();
+        if blocked(me, target, &others, eps) {
+            text.push_str(
+                " A robot stands in its way, so it curves around it instead of going straight.",
+            );
+        }
+    }
+}
+
 impl Algorithm for CrashGathering {
     fn key(&self) -> &'static str {
         "CrashGathering"
@@ -179,6 +204,48 @@ impl Algorithm for CrashGathering {
             terminate: false,
             overlay,
         }
+    }
+
+    fn explain(&self, look: &Look<'_>, scratch: &mut Scratch) -> Option<String> {
+        let eps = look.model.eps;
+        let me = look.position;
+        let (occupied, mine) = look.occupied();
+        let n = occupied.len();
+        let seen = format!(
+            "It sees {n} occupied point{}",
+            if n == 1 { "" } else { "s" }
+        );
+        let multiplicity = occupied.iter().find(|o| o.multiple).map(|o| o.at);
+        let target = match multiplicity {
+            Some(_) if occupied[mine].multiple => {
+                return Some(format!(
+                    "{seen}, and stands on the multiplicity point, the meeting point: it stays there for good (terminates)."
+                ))
+            }
+            Some(m) => {
+                let mut text = format!("{seen}, one of them a multiplicity: it heads for it, {} units away.", crate::num(dist(me, m)));
+                if dist(me, m) > eps {
+                    self.blocked_note(me, m, &occupied, mine, eps, &mut text);
+                }
+                return Some(text);
+            }
+            None => {
+                let points: Vec<Point> = occupied.iter().map(|o| o.at).collect();
+                enclosing_circle(&points, look.model.precision, scratch)
+            }
+        };
+        let to = dist(me, target.center);
+        let mut text = format!(
+            "{seen}, none of them a multiplicity: it heads for the centre of their smallest enclosing circle (radius {}), {} units away.",
+            crate::num(target.radius),
+            crate::num(to)
+        );
+        if to <= eps {
+            text.push_str(" It is already there, so it stays.");
+        } else {
+            self.blocked_note(me, target.center, &occupied, mine, eps, &mut text);
+        }
+        Some(text)
     }
 }
 

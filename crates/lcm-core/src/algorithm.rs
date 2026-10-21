@@ -146,6 +146,12 @@ pub trait Algorithm {
     fn stops_when_alone(&self) -> bool {
         true
     }
+
+    /// What the robot sees and the rule it applies to `look`, as sentences
+    /// for the page's inspector. `None`: the algorithm gives no explanation.
+    fn explain(&self, _look: &Look<'_>, _scratch: &mut Scratch) -> Option<String> {
+        None
+    }
 }
 
 /// Colour marking which task a robot was given (TwoTask).

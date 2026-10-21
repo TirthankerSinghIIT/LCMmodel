@@ -533,6 +533,32 @@ impl Simulation {
         Some(target)
     }
 
+    /// Why robot `i` would do what it does if it looked now, in the words of
+    /// its algorithm (`None` if it would not compute, or the algorithm gives
+    /// no explanation). Changes nothing about the run.
+    pub fn explain(&mut self, i: usize) -> Option<String> {
+        let r = &self.robots;
+        if i >= r.len()
+            || r.state[i] == RobotState::Crash
+            || r.terminated[i]
+            || r.fault[i] == FaultKind::Byzantine
+        {
+            return None;
+        }
+        let me_index = self.build_view(i, self.now);
+        let position = self.robots.pos[i];
+        let mut frame_rng = self.frame_rng.clone();
+        let compass = self.compass.get(i).copied();
+        let (text, _) = self.in_frame(i, me_index, position, &mut frame_rng, |a, look, scratch| {
+            a.explain(look, scratch)
+        });
+        // A dynamic compass drew a deviation for this preview only.
+        if let Some(c) = compass {
+            self.compass[i] = c;
+        }
+        text
+    }
+
     /// Visualize ticks among the events handled: they belong to no robot.
     #[must_use]
     pub fn tick_count(&self) -> u64 {
@@ -857,18 +883,18 @@ impl Simulation {
         })
     }
 
-    /// Robot `i`'s Compute on the view just built, in its own frame when
-    /// frames are on: the destination and circle come back in global
-    /// coordinates. Returns `(target, terminate, overlay)`.
-    fn compute_in_frame(
+    /// Runs `f` on robot `i`'s Look of the view just built, in its own frame
+    /// when frames are on; returns its result and that frame (`None` for
+    /// global coordinates).
+    fn in_frame<R>(
         &mut self,
         i: usize,
         me_index: usize,
         position: Point,
-        rng: &mut Rng,
         frame_rng: &mut Rng,
-    ) -> (Point, bool, OverlayUpdate) {
-        let algorithm = &self.algorithms[usize::from(self.robots.algo[i])];
+        f: impl FnOnce(&dyn Algorithm, &Look<'_>, &mut Scratch) -> R,
+    ) -> (R, Option<LocalFrame>) {
+        let algorithm = self.algorithms[usize::from(self.robots.algo[i])].as_ref();
         if self.frames == Frames::Global {
             let look = Look {
                 me: robot_id_u32(i),
@@ -877,8 +903,7 @@ impl Simulation {
                 view: &self.view,
                 model: &self.model,
             };
-            let d = algorithm.compute(&look, rng, &mut self.scratch);
-            return (d.target, d.terminate, d.overlay);
+            return (f(algorithm, &look, &mut self.scratch), None);
         }
         let frame = if self.frames == Frames::Compass {
             if !self.compass_static {
@@ -915,7 +940,26 @@ impl Simulation {
             view: &self.view,
             model: &model,
         };
-        let d = algorithm.compute(&look, rng, &mut self.scratch);
+        (f(algorithm, &look, &mut self.scratch), Some(frame))
+    }
+
+    /// Robot `i`'s Compute on the view just built, in its own frame when
+    /// frames are on: the destination and circle come back in global
+    /// coordinates. Returns `(target, terminate, overlay)`.
+    fn compute_in_frame(
+        &mut self,
+        i: usize,
+        me_index: usize,
+        position: Point,
+        rng: &mut Rng,
+        frame_rng: &mut Rng,
+    ) -> (Point, bool, OverlayUpdate) {
+        let (d, frame) = self.in_frame(i, me_index, position, frame_rng, |a, look, scratch| {
+            a.compute(look, rng, scratch)
+        });
+        let Some(frame) = frame else {
+            return (d.target, d.terminate, d.overlay);
+        };
         let overlay = match d.overlay {
             OverlayUpdate::Set(c) => OverlayUpdate::Set(Circle::new(
                 frame.to_global(c.center),

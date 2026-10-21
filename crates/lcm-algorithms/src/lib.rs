@@ -36,6 +36,24 @@ use lcm_core::{
     Algorithm, Assignment, ConfigError, Plan, SchedulerKind, SimConfig, Simulation, TaskColor,
 };
 
+/// A distance or angle for an explanation: four significant digits, or
+/// scientific notation when tiny.
+pub(crate) fn num(x: f64) -> String {
+    if x == 0.0 {
+        "0".to_owned()
+    } else if x.abs() >= 1e-3 && x.abs() < 1e7 {
+        let digits = (3 - libm::floor(libm::log10(x.abs())) as i32).max(0);
+        let text = format!("{x:.prec$}", prec = usize::try_from(digits).unwrap_or(0));
+        if text.contains('.') {
+            text.trim_end_matches('0').trim_end_matches('.').to_owned()
+        } else {
+            text
+        }
+    } else {
+        format!("{x:.2e}")
+    }
+}
+
 /// A selectable entry: key (as sent by the UI), display name, plan builder.
 pub struct Entry {
     pub key: &'static str,

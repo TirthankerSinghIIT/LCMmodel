@@ -364,6 +364,13 @@ impl WasmSimulation {
         ])
     }
 
+    /// What robot `i` would see and which rule it would apply if it looked
+    /// now, in its algorithm's words (`undefined` if it would not compute or
+    /// the algorithm gives no explanation). Changes nothing about the run.
+    pub fn explain(&mut self, i: u32) -> Option<String> {
+        self.sim.explain(i as usize)
+    }
+
     /// Everything known about robot `i` at the current time, as JSON; `null`
     /// for an index out of range.
     #[must_use]

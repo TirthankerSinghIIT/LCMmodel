@@ -197,6 +197,22 @@ export class WasmSimulation {
         return ret;
     }
     /**
+     * What robot `i` would see and which rule it would apply if it looked
+     * now, in its algorithm's words (`undefined` if it would not compute or
+     * the algorithm gives no explanation). Changes nothing about the run.
+     * @param {number} i
+     * @returns {string | undefined}
+     */
+    explain(i) {
+        const ret = wasm.wasmsimulation_explain(this.__wbg_ptr, i);
+        let v1;
+        if (ret[0] !== 0) {
+            v1 = getStringFromWasm0(ret[0], ret[1]);
+            wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        }
+        return v1;
+    }
+    /**
      * Every robot at the current time as CSV, in full precision.
      * @returns {string}
      */

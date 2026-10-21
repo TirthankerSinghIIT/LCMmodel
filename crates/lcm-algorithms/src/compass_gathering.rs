@@ -124,6 +124,51 @@ impl Algorithm for CompassGathering {
             overlay: OverlayUpdate::Keep,
         }
     }
+
+    fn explain(&self, look: &Look<'_>, _: &mut Scratch) -> Option<String> {
+        let me = look.position;
+        let q = (0..look.view.len())
+            .find(|&k| k != look.me_index)
+            .map(|k| look.view.pos[k])?;
+        let p = Point::new(q.x - me.x, q.y - me.y);
+        let gap = libm::hypot(p.x, p.y);
+        let name = match self.rules {
+            Rules::StaticCompass => "A_SS",
+            Rules::DynamicSynchronous => "A_SD",
+            Rules::DynamicAsynchronous => "A_AD",
+        };
+        if gap <= look.model.eps {
+            return Some(format!(
+                "The other robot is on its point: they have gathered. {}",
+                if self.terminate {
+                    "It terminates."
+                } else {
+                    "Under async it stays without terminating (Remark 2)."
+                }
+            ));
+        }
+        let bearing = libm::atan2(p.y, p.x).to_degrees().rem_euclid(360.0);
+        let d = destination(self.rules, self.phi, p);
+        let action = if d == p {
+            "it moves onto the other robot".to_owned()
+        } else if d.x == 0.0 && d.y == 0.0 {
+            "it waits".to_owned()
+        } else if self.rules == Rules::StaticCompass {
+            format!("it steps west by the gap ({} units)", crate::num(gap))
+        } else {
+            let turn = libm::atan2(d.y, d.x) - libm::atan2(p.y, p.x);
+            format!(
+                "it moves to the other robot's position turned {}° counter-clockwise about itself",
+                crate::num(turn.to_degrees().rem_euclid(360.0))
+            )
+        };
+        Some(format!(
+            "By its own compass the other robot is {} units away, {}° counter-clockwise from its east. Under rule set {name} (φ = {}°), at that bearing {action}.",
+            crate::num(gap),
+            crate::num(bearing),
+            crate::num(self.phi.to_degrees()),
+        ))
+    }
 }
 
 /// The registry entry: two robots; the rule set follows the compass and the

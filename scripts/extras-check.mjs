@@ -89,5 +89,18 @@ await examples("advanced", "CrashGathering", (r) => r.stop === "ended" && (r.ter
 // Mutual visibility never terminates: the examples stop at a turn limit, with everyone in sight.
 await examples("MutualVisibility", null, (r) => r.stop !== "running" && r.seeing === r.robots && r.status.includes(`${r.robots} of ${r.robots} see everyone`));
 
+// The inspector's "If it looked now": the algorithm's own account of the selected robot's next Compute.
+await js(`(() => { const a = document.getElementById("algorithm"); a.value = "advanced"; a.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+await js(`lcm.settings.set("variant", "CompassGathering", true)`);
+await sleep(200);
+const runBefore = await js(`lcm.renderer.frame ? lcm.renderer.frame.run : -1`);
+await js(`document.querySelector("#examples_menu [data-example='0']").click()`);
+await until(`lcm.renderer.frame && lcm.renderer.frame.run !== ${runBefore} && lcm.renderer.frame.robots === 2`, 5000);
+if (await js(`lcm.state === "running"`)) await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }))`);
+await js(`(() => { window.__why = null; lcm.client.on("robot", ({ info }) => { window.__why = info && info.why; }); lcm.client.inspect(0); })()`);
+await until("window.__why !== null", 5000);
+const why = await js(`window.__why`);
+check("inspector explains the robot's rule (compass gathering)", typeof why === "string" && why.includes("A_SS") && why.includes("By its own compass"), String(why));
+
 check("no console errors", consoleErrors.length === 0, consoleErrors.join(" | "));
 await finish();

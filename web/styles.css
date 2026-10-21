@@ -224,6 +224,8 @@ a.btn { text-decoration: none; }
 #inspector dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 4px 0 0; }
 #inspector dt { color: var(--text-2); }
 #inspector dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#inspector .why { margin: 4px 0 0; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px; line-height: 1.45; max-height: 180px; overflow-y: auto; }
+#inspector .why-head { display: block; color: var(--text-2); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
 

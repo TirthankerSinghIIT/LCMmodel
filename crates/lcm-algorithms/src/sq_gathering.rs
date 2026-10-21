@@ -298,6 +298,38 @@ impl Algorithm for SqGathering {
             overlay: OverlayUpdate::Keep,
         }
     }
+
+    fn explain(&self, look: &Look<'_>, _: &mut Scratch) -> Option<String> {
+        let obs = observe_with(
+            &look.view.pos,
+            look.me_index,
+            look.model.eps,
+            look.model.multiplicity,
+        );
+        let d = decide(&obs);
+        let points = obs.points.len();
+        let mut text = format!(
+            "It sees {points} occupied point{}, {} of them multiplicities (κ = {}); its own point is {} (b = {}).",
+            if points == 1 { "" } else { "s" },
+            d.kappa,
+            d.kappa,
+            if d.on_multiplicity { "a multiplicity" } else { "single" },
+            u8::from(d.on_multiplicity),
+        );
+        text.push_str(&format!(
+            " Rule (lines {}): {}.",
+            d.rule.lines(),
+            d.rule.description()
+        ));
+        let to = dist(obs.points[obs.me].at, d.destination(&obs));
+        if to > 0.0 {
+            text.push_str(&format!(" It moves {} units.", crate::num(to)));
+        }
+        if points == 1 {
+            text.push_str(" Only one occupied point: everyone is gathered, so it terminates.");
+        }
+        Some(text)
+    }
 }
 
 /// The registry entry's plan builder. Theorem 5 holds under any sequential
@@ -310,7 +342,10 @@ impl Algorithm for SqGathering {
 /// The asynchronous scheduler, or faulty robots.
 pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
     let refuse = |message: &str| Err(ConfigError::Unsupported(message.to_owned()));
-    if matches!(config.scheduler, SchedulerKind::Async | SchedulerKind::KAsync) {
+    if matches!(
+        config.scheduler,
+        SchedulerKind::Async | SchedulerKind::KAsync
+    ) {
         return refuse(
             "SqGathering needs the sequential scheduler (Settings → Scheduler → Sequential): with more than one robot active at once, gathering is unsolvable even with multiplicity detection (Lemma 8 of the paper). SSYNC and FSYNC can be chosen to see why.",
         );
