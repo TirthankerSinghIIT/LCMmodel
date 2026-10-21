@@ -329,6 +329,16 @@ kbd { color: var(--text); font-family: var(--mono); font-size: 11.5px; padding: 
  * whatever height the toolbar wraps to. */
 .sheet-close { display: none; }
 
+/* Desktop: the toolbar stops short of the stats card in the top right corner (236 px wide, 12 px
+ * margins); if fonts run wide, the algorithm menu gives up the room. */
+@media (min-width: 1220px) {
+  #toolbar { max-width: calc(100vw - 284px); }
+  #algorithm { flex: 0 1 auto; min-width: 120px; }
+}
+@media (min-width: 1220px) and (max-width: 1439px) {
+  #docs_link .label { display: none; }
+}
+
 /* Tablet and small laptops: icon-only toolbar, stats under it on the right. */
 @media (max-width: 1219px) {
   #toolbar .label { display: none; }
