@@ -171,8 +171,9 @@ pub struct Simulation {
     delta: Option<f64>,
     stop: StopPolicy,
     stop_fraction: f64,
-    /// Without faults, a silent epoch means nothing will ever change.
-    fault_free: bool,
+    /// Without faults or randomized robots, a silent epoch means nothing will
+    /// ever change.
+    stall_check: bool,
     stalled: bool,
     max_turns: Option<u64>,
     turn_limit: bool,
@@ -310,7 +311,9 @@ impl Simulation {
             delta: config.delta,
             stop: config.stop_policy,
             stop_fraction: config.stop_fraction,
-            fault_free: config.num_of_faults == 0,
+            // A silent epoch proves a stall only for deterministic robots.
+            stall_check: config.num_of_faults == 0
+                && !plan.algorithms.iter().any(|a| a.randomized()),
             stalled: false,
             max_turns: config.max_turns,
             turn_limit: false,
@@ -1210,7 +1213,7 @@ impl Simulation {
                 }
                 if s.unseen == 0 {
                     turns.epochs_completed += 1;
-                    if !turns.progress && self.fault_free {
+                    if !turns.progress && self.stall_check {
                         self.stalled = true;
                         return;
                     }
@@ -1264,7 +1267,7 @@ impl Simulation {
                 }
                 if !turns.epoch.is_empty() {
                     turns.epochs_completed += 1;
-                    if !turns.progress && self.fault_free {
+                    if !turns.progress && self.stall_check {
                         self.stalled = true;
                         return;
                     }
@@ -1396,7 +1399,7 @@ impl Simulation {
             rounds.unseen = (0..r.len()).filter(|&i| live(i) && !rounds.seen[i]).count();
             if rounds.unseen == 0 {
                 rounds.epochs_completed += 1;
-                if !rounds.progress && self.fault_free {
+                if !rounds.progress && self.stall_check {
                     self.stalled = true;
                     return;
                 }

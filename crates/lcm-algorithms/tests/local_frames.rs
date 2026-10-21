@@ -45,7 +45,18 @@ fn agreement(key: &str, chirality: bool) -> f64 {
         scheduler: SchedulerKind::Sequential,
         ..SimConfig::default()
     };
-    let plan = lcm_algorithms::plan(key, &config).expect("builds");
+    // Two-robot algorithms refuse the default swarm: build them for two.
+    let plan = lcm_algorithms::plan(key, &config)
+        .or_else(|_| {
+            lcm_algorithms::plan(
+                key,
+                &SimConfig {
+                    num_of_robots: 2,
+                    ..config.clone()
+                },
+            )
+        })
+        .expect("builds");
     let algorithm = &plan.algorithms[0];
     let mut rng = Rng::new(42);
     let mut frames = Rng::new(7);
@@ -119,6 +130,8 @@ fn frame_invariance_of_every_algorithm() {
         "GoToCenter",
         "SqGathering",
         "TwoTask",
+        "RandomizedGathering",
+        "RandomizedGatheringUniform",
     ] {
         let (_, rotated, mirrored) = get(key);
         assert!(
@@ -129,4 +142,7 @@ fn frame_invariance_of_every_algorithm() {
     // Spreading samples an axis-aligned grid over an axis-aligned box: a
     // disoriented robot computes a different Voronoi centroid.
     assert!(get("Spreading").1 < 0.5);
+    // Compass gathering reads directions off the robot's own compass: that is
+    // the point of the algorithm, so a rotated frame changes its decision.
+    assert!(get("CompassGathering").1 < 1.0);
 }

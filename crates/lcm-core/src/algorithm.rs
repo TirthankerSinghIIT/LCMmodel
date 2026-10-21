@@ -130,6 +130,14 @@ pub trait Algorithm {
     fn key(&self) -> &'static str;
 
     fn compute(&self, look: &Look<'_>, rng: &mut Rng, scratch: &mut Scratch) -> Decision;
+
+    /// The algorithm draws random numbers to decide. A randomized run can
+    /// stand still for an epoch and still move later, so the core's stall
+    /// check (an epoch without progress means nothing will ever change) is
+    /// not applied to it.
+    fn randomized(&self) -> bool {
+        false
+    }
 }
 
 /// Colour marking which task a robot was given (TwoTask).

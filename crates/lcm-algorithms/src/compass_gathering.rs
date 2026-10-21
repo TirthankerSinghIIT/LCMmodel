@@ -1,0 +1,274 @@
+//! Gathering two robots with unreliable compasses: Izumi, Souissi, Katayama,
+//! Inuzuka, Défago, Wada, Yamashita, "The gathering problem for two oblivious
+//! robots with unreliable compasses", SIAM J. Comput. 41(1), 2012
+//! (arXiv:1111.1492, Sections 3-5).
+//!
+//! Each robot's x-axis deviates from the global one by at most φ (a
+//! φ-compass); robots share chirality; φ is known to the algorithm. With `p`
+//! the other robot's position in the robot's own frame and `a = arg p` in
+//! [0, 2π):
+//!
+//! - **A_SS** (static compass, SSYNC or ASYNC, correct iff φ < π/2):
+//!   `p = 0` stay · `0 < a ≤ π` go to `p` · `π < a ≤ 3π/2 + φ` go to
+//!   `(-|p|, 0)` · otherwise stay.
+//! - **A_SD** (dynamic compass, SSYNC, correct iff φ < π/4):
+//!   `π/2 + φ < a ≤ 3π/2 - φ` go to `p` · `-π/2 + φ < a ≤ π/2 - φ` stay ·
+//!   otherwise go to `p` turned by `π/2 + φ`.
+//! - **A_AD** (dynamic compass, ASYNC, sufficient for φ < π/6):
+//!   `2π/3 + φ ≤ a < 3π/2` go to `p` · `3π/2 ≤ a` or `a ≤ π/3 - φ` stay ·
+//!   otherwise go to `p` turned by `2π/3 + 2φ`.
+//!
+//! The paper's robots never terminate (gathering is "eventually co-located
+//! forever"). Here a robot that finds the other on its own point terminates
+//! under the sequential and synchronous schedulers, where that is safe; under
+//! async it only stays (Remark 2 of the paper shows terminating is wrong there).
+
+use core::f64::consts::{FRAC_PI_2, PI};
+use lcm_core::{
+    Algorithm, ConfigError, Decision, Look, OverlayUpdate, Plan, Point, Rng, SchedulerKind,
+    Scratch, SimConfig,
+};
+
+/// Which rule set of the paper a run uses.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Rules {
+    StaticCompass,
+    DynamicSynchronous,
+    DynamicAsynchronous,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CompassGathering {
+    pub rules: Rules,
+    /// The bound φ on the compass error, in radians, known to the robots.
+    pub phi: f64,
+    /// Terminate once gathered (not under async, see the module notes).
+    pub terminate: bool,
+}
+
+/// `ρ_ω(p)`: `p` turned counter-clockwise by `ω` about the robot.
+fn turn(p: Point, w: f64) -> Point {
+    let (s, c) = (libm::sin(w), libm::cos(w));
+    Point::new(c * p.x - s * p.y, s * p.x + c * p.y)
+}
+
+/// The rule's destination for a robot at the origin seeing the other at `p`.
+#[must_use]
+pub fn destination(rules: Rules, phi: f64, p: Point) -> Point {
+    let stay = Point::new(0.0, 0.0);
+    let mut a = libm::atan2(p.y, p.x);
+    if a < 0.0 {
+        a += 2.0 * PI;
+    }
+    match rules {
+        Rules::StaticCompass => {
+            if a > 0.0 && a <= PI {
+                p
+            } else if a > PI && a <= 3.0 * FRAC_PI_2 + phi {
+                Point::new(-libm::hypot(p.x, p.y), 0.0)
+            } else {
+                stay
+            }
+        }
+        Rules::DynamicSynchronous => {
+            if a > FRAC_PI_2 + phi && a <= 3.0 * FRAC_PI_2 - phi {
+                p
+            } else if a <= FRAC_PI_2 - phi || a > 3.0 * FRAC_PI_2 + phi {
+                // (-π/2 + φ, π/2 - φ], written on [0, 2π).
+                stay
+            } else {
+                turn(p, FRAC_PI_2 + phi)
+            }
+        }
+        Rules::DynamicAsynchronous => {
+            if a >= 2.0 * PI / 3.0 + phi && a < 3.0 * FRAC_PI_2 {
+                p
+            } else if a >= 3.0 * FRAC_PI_2 || a <= PI / 3.0 - phi {
+                stay
+            } else {
+                turn(p, 2.0 * PI / 3.0 + 2.0 * phi)
+            }
+        }
+    }
+}
+
+impl Algorithm for CompassGathering {
+    fn key(&self) -> &'static str {
+        "CompassGathering"
+    }
+
+    fn compute(&self, look: &Look<'_>, _: &mut Rng, _: &mut Scratch) -> Decision {
+        let me = look.position;
+        let other = (0..look.view.len())
+            .find(|&k| k != look.me_index)
+            .map(|k| look.view.pos[k]);
+        let Some(q) = other else {
+            return Decision {
+                target: me,
+                terminate: false,
+                overlay: OverlayUpdate::Keep,
+            };
+        };
+        let p = Point::new(q.x - me.x, q.y - me.y);
+        if libm::hypot(p.x, p.y) <= look.model.eps {
+            return Decision {
+                target: me,
+                terminate: self.terminate,
+                overlay: OverlayUpdate::Keep,
+            };
+        }
+        let d = destination(self.rules, self.phi, p);
+        Decision {
+            target: Point::new(me.x + d.x, me.y + d.y),
+            terminate: false,
+            overlay: OverlayUpdate::Keep,
+        }
+    }
+}
+
+/// The registry entry: two robots; the rule set follows the compass and the
+/// scheduler (static: A_SS; dynamic: A_SD when robots never overlap, A_AD
+/// otherwise).
+///
+/// # Errors
+/// Not exactly two robots, or faulty robots.
+pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
+    let refuse = |m: &str| Err(ConfigError::Unsupported(m.to_owned()));
+    let n = config
+        .initial_positions
+        .as_ref()
+        .filter(|p| p.len() == config.num_of_robots as usize)
+        .map_or(config.num_of_robots as usize, Vec::len);
+    if n != 2 {
+        return refuse(
+            "Compass gathering (Izumi et al.) is for exactly two robots: set Robots to 2",
+        );
+    }
+    if config.num_of_faults > 0 {
+        return refuse("Compass gathering assumes no faulty robots: set Faulty robots to 0");
+    }
+    let overlapping = matches!(
+        config.scheduler,
+        SchedulerKind::Async | SchedulerKind::KAsync
+    );
+    let rules = if config.compass_static || config.frames != lcm_core::Frames::Compass {
+        Rules::StaticCompass
+    } else if overlapping {
+        Rules::DynamicAsynchronous
+    } else {
+        Rules::DynamicSynchronous
+    };
+    let phi = if config.frames == lcm_core::Frames::Compass {
+        config.compass_error.to_radians()
+    } else {
+        0.0
+    };
+    Ok(Plan::single(Box::new(CompassGathering {
+        rules,
+        phi,
+        terminate: !overlapping,
+    })))
+}
+
+/// Where the settings leave the paper's guarantees.
+#[must_use]
+pub fn notes(config: &SimConfig) -> Vec<String> {
+    let mut notes = Vec::new();
+    let phi = config.compass_error;
+    if config.frames != lcm_core::Frames::Compass {
+        notes.push(
+            "The robots' compasses are exact here (Frames is not Compass): φ = 0.".to_owned(),
+        );
+        return notes;
+    }
+    let overlapping = matches!(
+        config.scheduler,
+        SchedulerKind::Async | SchedulerKind::KAsync
+    );
+    let (name, bound, tight) = if config.compass_static {
+        ("A_SS (static compass)", 90.0, true)
+    } else if overlapping {
+        ("A_AD (dynamic compass, asynchronous)", 30.0, false)
+    } else {
+        ("A_SD (dynamic compass, synchronous)", 45.0, true)
+    };
+    if phi >= bound {
+        notes.push(format!(
+            "Outside the guarantee: {name} is proved for φ < {bound}°{}; this run has φ = {phi}°.",
+            if tight {
+                " and no algorithm works above it"
+            } else {
+                " (whether that bound is tight is open)"
+            }
+        ));
+    } else {
+        notes.push(format!(
+            "{name}: guaranteed to gather for φ < {bound}°; this run has φ = {phi}°."
+        ));
+    }
+    if overlapping {
+        notes.push("Under async the robots do not terminate once together (Remark 2 of the paper): the run goes on with both staying put.".to_owned());
+    }
+    notes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(deg: f64) -> Point {
+        let a = deg.to_radians();
+        Point::new(libm::cos(a), libm::sin(a))
+    }
+
+    #[test]
+    fn static_rules_by_sector() {
+        let phi = 30f64.to_radians();
+        // North-ish (0 < a ≤ π): go to the other robot.
+        assert_eq!(destination(Rules::StaticCompass, phi, at(90.0)), at(90.0));
+        // South-west (π < a ≤ 3π/2 + φ): go west by |p|.
+        let d = destination(Rules::StaticCompass, phi, at(250.0));
+        assert!((d.x + 1.0).abs() < 1e-12 && d.y.abs() < 1e-12);
+        // Just east of south beyond 3π/2 + φ: stay.
+        assert_eq!(
+            destination(Rules::StaticCompass, phi, at(330.0)),
+            Point::new(0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn dynamic_synchronous_rules_by_sector() {
+        let phi = 20f64.to_radians();
+        assert_eq!(
+            destination(Rules::DynamicSynchronous, phi, at(180.0)),
+            at(180.0)
+        );
+        assert_eq!(
+            destination(Rules::DynamicSynchronous, phi, at(0.0)),
+            Point::new(0.0, 0.0)
+        );
+        let r = destination(Rules::DynamicSynchronous, phi, at(90.0));
+        let want = at(90.0 + 90.0 + 20.0);
+        assert!((r.x - want.x).abs() < 1e-12 && (r.y - want.y).abs() < 1e-12);
+    }
+
+    #[test]
+    fn dynamic_asynchronous_rules_by_sector() {
+        let phi = 10f64.to_radians();
+        assert_eq!(
+            destination(Rules::DynamicAsynchronous, phi, at(200.0)),
+            at(200.0)
+        );
+        assert_eq!(
+            destination(Rules::DynamicAsynchronous, phi, at(300.0)),
+            Point::new(0.0, 0.0)
+        );
+        assert_eq!(
+            destination(Rules::DynamicAsynchronous, phi, at(30.0)),
+            Point::new(0.0, 0.0)
+        );
+        let r = destination(Rules::DynamicAsynchronous, phi, at(90.0));
+        let want = at(90.0 + 120.0 + 20.0);
+        assert!((r.x - want.x).abs() < 1e-12 && (r.y - want.y).abs() < 1e-12);
+    }
+}

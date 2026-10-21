@@ -14,6 +14,8 @@
 //! refuses the asynchronous scheduler.
 
 mod circle_formation;
+pub mod compass_gathering;
+pub mod randomized_gathering;
 mod gathering;
 mod go_to_center;
 mod sec;
@@ -86,6 +88,21 @@ pub const REGISTRY: &[Entry] = &[
         build: two_task,
     },
     Entry {
+        key: "CompassGathering",
+        name: "Two robots, unreliable compasses",
+        build: compass_gathering::plan,
+    },
+    Entry {
+        key: "RandomizedGathering",
+        name: "Randomized gathering (two robots)",
+        build: randomized_gathering::plan,
+    },
+    Entry {
+        key: "RandomizedGatheringUniform",
+        name: "Randomized gathering, λ uniform (two robots)",
+        build: randomized_gathering::plan_uniform,
+    },
+    Entry {
         key: "SqGathering",
         name: "SqGathering",
         build: sq_gathering::plan,
@@ -108,6 +125,8 @@ pub fn requirements(key: &str) -> (bool, bool) {
 pub fn notes(key: &str, config: &SimConfig) -> Vec<String> {
     match key {
         "SqGathering" => sq_gathering::notes(config),
+        "CompassGathering" => compass_gathering::notes(config),
+        "RandomizedGathering" | "RandomizedGatheringUniform" => randomized_gathering::notes(config),
         _ => Vec::new(),
     }
 }
