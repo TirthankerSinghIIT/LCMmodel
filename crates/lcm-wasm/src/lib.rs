@@ -230,6 +230,20 @@ impl WasmSimulation {
         self.sim.sequential()
     }
 
+    /// `frames: "compass"`: each robot's compass deviation from the global
+    /// north, in radians (empty otherwise).
+    #[must_use]
+    pub fn compass(&self) -> js_sys::Float64Array {
+        js_sys::Float64Array::from(self.sim.compass_deviations())
+    }
+
+    /// k-Async: Looks put off so far because they would have broken the bound.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn deferred_looks(&self) -> f64 {
+        self.sim.deferred_looks() as f64
+    }
+
     /// SSYNC or FSYNC: robots act in rounds.
     #[must_use]
     pub fn in_rounds(&self) -> bool {

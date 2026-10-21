@@ -89,6 +89,23 @@ export class WasmSimulation {
         return ret;
     }
     /**
+     * `frames: "compass"`: each robot's compass deviation from the global
+     * north, in radians (empty otherwise).
+     * @returns {Float64Array}
+     */
+    compass() {
+        const ret = wasm.wasmsimulation_compass(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * k-Async: Looks put off so far because they would have broken the bound.
+     * @returns {number}
+     */
+    deferred_looks() {
+        const ret = wasm.wasmsimulation_deferred_looks(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @returns {boolean}
      */
     ended() {

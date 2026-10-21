@@ -241,6 +241,8 @@ function postFrame(extra = {}) {
     unit: sim.in_rounds() ? "round" : "turn",
     members: sim.in_rounds() ? Array.from(sim.round_members()) : null,
     awaiting: sim.awaiting_schedule(),
+    compass: n <= 2000 && sim.compass ? Array.from(sim.compass()) : null,
+    deferred: sim.deferred_looks ? sim.deferred_looks() : 0,
     // While a turn is played one at a time: who is walking, in which beat, how far, and the settle time.
     walk: perTurn !== null && pace
       ? { robot: pace.robot, phase: pace.progress < 0 ? "decide" : "move", length: pace.length, cut: pace.cut,

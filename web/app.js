@@ -602,7 +602,8 @@ function updateHud(force = false) {
     $("hud_epochs").textContent = frame.epochs.toLocaleString();
     $("hud_turns").textContent = (frame.turns ?? 0).toLocaleString();
   }
-  $("hud_events").textContent = (frame.events - frame.ticks).toLocaleString();
+  $("hud_events").textContent = (frame.events - frame.ticks).toLocaleString()
+    + (frame.deferred ? ` · ${frame.deferred.toLocaleString()} put off` : "");
   $("hud_ticks").textContent = frame.ticks.toLocaleString();
   $("hud_rate").textContent = state === "running" ? Math.round(rate).toLocaleString() : "—";
   const lod = frame.robots > LOD.outlines ? " · simplified drawing" : "";
@@ -642,7 +643,7 @@ $("algorithm").addEventListener("change", () => {
   // An algorithm that only works under the sequential scheduler (SqGathering)
   // switches it on, rather than failing with the async default.
   const a = algorithms.find((x) => x.key === $("algorithm").value);
-  if (a?.sequential_only && settings.values.scheduler === "async") {
+  if (a?.sequential_only && (settings.values.scheduler === "async" || settings.values.scheduler === "kasync")) {
     settings.set("scheduler", "sequential", false);
     toast(`${a.name} runs one robot at a time: Scheduler set to Sequential`);
   }

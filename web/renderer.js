@@ -719,6 +719,21 @@ export class Renderer {
       ctx.restore();
     }
 
+    // Unreliable compasses: each robot's own north, a short needle (the true north is straight up).
+    const compass = frame.compass;
+    if (compass && compass.length === n && n <= 300) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(220,60,60,.85)"; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const len = Math.max(r, 2) + 9;
+      for (let i = 0; i < n; i++) {
+        const x = X(xy[2 * i]), y = Y(xy[2 * i + 1]), a = compass[i];
+        ctx.moveTo(x, y); ctx.lineTo(x - len * Math.sin(a), y - len * Math.cos(a));
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // SSYNC/FSYNC: the robots of the round under way.
     const members = frame.members;
     if (members && members.length < n && n <= LOD.circles && !this.options.adversary) {

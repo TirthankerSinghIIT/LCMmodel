@@ -310,7 +310,7 @@ impl Algorithm for SqGathering {
 /// The asynchronous scheduler, or faulty robots.
 pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
     let refuse = |message: &str| Err(ConfigError::Unsupported(message.to_owned()));
-    if config.scheduler == SchedulerKind::Async {
+    if matches!(config.scheduler, SchedulerKind::Async | SchedulerKind::KAsync) {
         return refuse(
             "SqGathering needs the sequential scheduler (Settings → Scheduler → Sequential): with more than one robot active at once, gathering is unsolvable even with multiplicity detection (Lemma 8 of the paper). SSYNC and FSYNC can be chosen to see why.",
         );
