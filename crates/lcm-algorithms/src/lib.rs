@@ -9,14 +9,15 @@
 //! work with by returning [`ConfigError::Unsupported`].
 //!
 //! Gathering and SEC are ported; they drive the core's parity tests. Uniform
-//! Circle Formation and Go-To-Center are ported too. SqGathering (Algorithm 8 of the
-//! sequential-schedulers paper) is new: it refuses any scheduler but the
-//! sequential one.
+//! Circle Formation, Go-To-Center, Spreading and TwoTask are ported too.
+//! SqGathering (Algorithm 8 of the sequential-schedulers paper) is new: it
+//! refuses the asynchronous scheduler.
 
 mod circle_formation;
 mod gathering;
 mod go_to_center;
 mod sec;
+mod spreading;
 pub mod sq_gathering;
 pub mod sq_trace;
 
@@ -24,9 +25,10 @@ pub use circle_formation::CircleFormation;
 pub use gathering::Gathering;
 pub use go_to_center::GoToCenter;
 pub use sec::Sec;
+pub use spreading::Spreading;
 pub use sq_gathering::SqGathering;
 
-use lcm_core::{Algorithm, ConfigError, Plan, SimConfig, Simulation};
+use lcm_core::{Algorithm, Assignment, ConfigError, Plan, SimConfig, Simulation, TaskColor};
 
 /// A selectable entry: key (as sent by the UI), display name, plan builder.
 pub struct Entry {
@@ -37,6 +39,19 @@ pub struct Entry {
 
 fn one<A: Algorithm + Default + 'static>(_: &SimConfig) -> Result<Plan, ConfigError> {
     Ok(Plan::single(Box::new(A::default())))
+}
+
+/// TwoTask (`scheduler.py`): each robot draws `u` in ID order; `u < 0.5`
+/// runs SEC and shows red, the others run Gathering and show blue.
+#[allow(clippy::unnecessary_wraps)]
+fn two_task(_: &SimConfig) -> Result<Plan, ConfigError> {
+    Ok(Plan {
+        algorithms: vec![Box::new(Sec), Box::new(Gathering)],
+        assignment: Assignment::Random(vec![
+            (0.5, 0, Some(TaskColor::Red)),
+            (1.0, 1, Some(TaskColor::Blue)),
+        ]),
+    })
 }
 
 pub const REGISTRY: &[Entry] = &[
@@ -61,6 +76,16 @@ pub const REGISTRY: &[Entry] = &[
         build: one::<GoToCenter>,
     },
     Entry {
+        key: "Spreading",
+        name: "Spreading",
+        build: one::<Spreading>,
+    },
+    Entry {
+        key: "TwoTask",
+        name: "Two Tasks (SEC + Gathering)",
+        build: two_task,
+    },
+    Entry {
         key: "SqGathering",
         name: "SqGathering",
         build: sq_gathering::plan,
@@ -74,6 +99,16 @@ pub fn requirements(key: &str) -> (bool, bool) {
     match key {
         "SqGathering" => (true, true),
         _ => (false, false),
+    }
+}
+
+/// Where a run's settings leave the model algorithm `key` was designed or
+/// proved for, as sentences the page can show. Empty inside the model.
+#[must_use]
+pub fn notes(key: &str, config: &SimConfig) -> Vec<String> {
+    match key {
+        "SqGathering" => sq_gathering::notes(config),
+        _ => Vec::new(),
     }
 }
 

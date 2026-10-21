@@ -5,7 +5,8 @@ Rust can reproduce the same random streams. Each fixture holds the config
 (in SimConfig JSON form), the first RECORDED events, and the final state.
 
 Run from the repository root (needs numpy, Python >= 3.12):
-    python reference/gen_fixtures.py
+    python reference/gen_fixtures.py              # every case
+    python reference/gen_fixtures.py spreading    # cases whose names start so
 """
 import json
 import math
@@ -129,6 +130,22 @@ CASES = {
     "gtc_fault_crash":       config(algorithm="GoToCenter", num_of_robots=10, visibility_radius=120,
                                     width_bound=200, height_bound=200, num_of_faults=3,
                                     fault_type="crash", random_seed=20),
+    # Spreading cases: the world box, the swarm's own box, a starved cell.
+    "spreading_6":            config(algorithm="Spreading", num_of_robots=6,
+                                     width_bound=200, height_bound=200, random_seed=5),
+    "spreading_open_5":       config(algorithm="Spreading", num_of_robots=5,
+                                     width_bound=0, height_bound=0, random_seed=6,
+                                     initial_positions=[[0, 0], [3, 1], [1, 4], [-2, 2], [2, -3]]),
+    "spreading_coincident_4": config(algorithm="Spreading", num_of_robots=4,
+                                     width_bound=100, height_bound=100, random_seed=7,
+                                     initial_positions=[[0, 0], [0, 0], [10, 0], [0, 10]]),
+    "spreading_fault_crash":  config(algorithm="Spreading", num_of_robots=8,
+                                     width_bound=200, height_bound=200, num_of_faults=2,
+                                     fault_type="crash", random_seed=8),
+    # TwoTask: each robot runs SEC (red) or Gathering (blue), drawn from the seed.
+    "twotask_10":             config(algorithm="TwoTask", num_of_robots=10, random_seed=7),
+    "twotask_fault_crash_12": config(algorithm="TwoTask", num_of_robots=12, num_of_faults=3,
+                                     fault_type="crash", random_seed=9),
 }
 
 
@@ -195,7 +212,11 @@ def generate(name, c):
 def main():
     out_dir = os.path.join(ROOT, "fixtures")
     os.makedirs(out_dir, exist_ok=True)
+    # Optional arguments: only the cases whose names start with one of them.
+    wanted = sys.argv[1:]
     for name, c in CASES.items():
+        if wanted and not any(name.startswith(w) for w in wanted):
+            continue
         fx = generate(name, c)
         with open(os.path.join(out_dir, f"{name}.json"), "w") as f:
             json.dump(fx, f, separators=(",", ":"))
