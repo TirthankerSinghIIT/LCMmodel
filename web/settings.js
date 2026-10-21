@@ -8,6 +8,7 @@ export const GROUPS = [
   { id: "start", label: "Start", open: true, describe: true },
   { id: "movement", label: "Movement", open: false },
   { id: "visibility", label: "Visibility", open: true },
+  { id: "model", label: "Robot model", open: false },
   { id: "faults", label: "Faults", open: false },
   { id: "timing", label: "Scheduler", open: false },
 ];
@@ -17,7 +18,8 @@ const ROTATABLE = ["square", "rectangle", "line", "polygon", "clusters"];
 const SIZE_LABEL = { square: "Side length", rectangle: "Width", circle: "Diameter", polygon: "Diameter", line: "Length", clusters: "Distance between groups" };
 
 // kind: "range" (slider + number), "log" (log-scale slider + number), "switch",
-// "select" (options: a list, or a function of the values), "number", "text".
+// "select" (options: a list, or a function of the values), "number", "text",
+// "line" (one line of text, typed in place).
 // `key` is the SimConfig field unless `local`; `label` may be a function of the
 // values; `note` is a line under the control; `showIf` hides a setting that
 // does not apply; `enabledBy` greys it out; `more` puts it under "More options"
@@ -95,6 +97,17 @@ export const SETTINGS = [
     hint: "Every robot sees every other robot." },
   { key: "visibility_radius", group: "visibility", label: "Radius", kind: "range", min: 10, max: 1000, step: 10, value: 150,
     enabledBy: (v) => !v.unlimited_visibility, hint: "How far a robot can see." },
+  { key: "obstructed_visibility", group: "visibility", label: "Robots block the view", kind: "switch", value: false,
+    hint: "A robot does not see a robot hidden behind another one (obstructed visibility). Each Look then costs time proportional to n², so keep the swarm small." },
+  { key: "robot_radius", group: "visibility", label: "Robot radius", kind: "range", min: 0, max: 20, step: 0.5, value: 0,
+    showIf: (v) => v.obstructed_visibility,
+    hint: "Robots block the view as discs of this radius. 0: points, which block only robots exactly in line behind them." },
+  { key: "multiplicity", group: "model", label: "Multiplicity detection", kind: "select", value: "weak",
+    options: [["none", "None: a shared point looks like any other"], ["weak", "Weak: one robot, or more than one"], ["strong", "Strong: how many robots"]],
+    hint: "What a robot can tell about a point several robots share. SqGathering needs at least weak detection: without it, gathering is impossible under a sequential scheduler (Theorem 4). The ports of the original algorithms see every robot and ignore this." },
+  { key: "frames", group: "model", label: "Coordinate frames", kind: "select", value: "global",
+    options: [["global", "Global: all robots share one frame"], ["rotated", "Own frame: random rotation and unit"], ["disoriented", "Disoriented: also random handedness"]],
+    hint: "At each Look a robot can get a private coordinate system of its own, with itself at the origin. An algorithm that only uses distances and angles behaves the same; one that uses the axes (Spreading's grid) does not." },
   { key: "num_of_faults", group: "faults", label: "Faulty robots", kind: "range", min: 0, max: 1000, step: 1, value: 0,
     hint: "How many robots, chosen at random, have a fault." },
   { key: "fault_type", group: "faults", label: "Fault type", kind: "select", value: "crash",
@@ -102,21 +115,38 @@ export const SETTINGS = [
     options: [["crash", "Crash: stops for good"], ["byzantine", "Byzantine: moves erratically"],
       ["omission", "Omission: skips half its moves"], ["delay", "Delay: 40 % speed"], ["mixed", "Mixed: all four"]] },
   { key: "scheduler", group: "timing", label: "Scheduler", kind: "select", value: "async",
-    options: [["async", "Async: robots act whenever they wake"], ["sequential", "Sequential: one robot at a time"]],
-    hint: "Async: every robot wakes on its own random clock, so many can be moving at once. Sequential: one robot does its whole Look, Compute and Move while every other robot stays still." },
+    options: [["async", "Async: robots act whenever they wake"], ["sequential", "Sequential: one robot at a time"],
+      ["ssync", "SSYNC: rounds, some robots at once"], ["fsync", "FSYNC: rounds, every robot at once"]],
+    hint: "Async: every robot wakes on its own random clock, so many can be moving at once. Sequential: one robot does its whole Look, Compute and Move while every other robot stays still. SSYNC: in each round a set of robots looks at the same instant, then they all move; FSYNC: every robot, every round." },
+  { key: "ssync_probability", group: "timing", label: "Chance to be active", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.5,
+    showIf: (v) => v.scheduler === "ssync",
+    hint: "SSYNC: each robot still moving is active in a round with this chance. A round with nobody drawn activates one robot at random." },
+  { key: "ssync_fairness", group: "timing", label: "Fairness bound", kind: "range", min: 1, max: 50, step: 1, value: 4,
+    showIf: (v) => v.scheduler === "ssync",
+    hint: "SSYNC: a robot left out of this many rounds in a row is active in the next one, so every robot gets to act." },
   { key: "activation_order", group: "timing", label: "Turn order", kind: "select", value: "round_robin",
     options: [["round_robin", "Round-robin: 0, 1, 2, …"], ["random", "Random: reshuffled every epoch"]],
     showIf: (v) => v.scheduler === "sequential",
     hint: "Who goes next. Each epoch, every robot still moving gets exactly one turn; crashed and terminated robots are skipped. Random uses the seed, so a run repeats." },
   { key: "turn_gap", group: "timing", label: "Pause between turns", kind: "select", value: "random",
     options: [["random", "Random (rate λ)"], ["none", "None"]],
-    showIf: (v) => v.scheduler === "sequential",
-    hint: "Simulated time between one robot stopping and the next one looking. None: the next robot looks at once." },
+    showIf: (v) => v.scheduler !== "async",
+    hint: "Simulated time between one turn (or round) ending and the next one starting. None: at once." },
+  { key: "schedule_text", group: "timing", label: (v) => (v.scheduler === "ssync" ? "Rounds" : "Turns"), kind: "line", value: "", local: true,
+    showIf: (v) => v.scheduler === "sequential" || v.scheduler === "ssync", more: true,
+    hint: "An explicit schedule instead of the order above. Sequential: robots in turn order, e.g. 0, 2, 1 (add @0.5 to stop a robot halfway: non-rigid with δ). SSYNC: the robots of each round, rounds separated by |, e.g. 0 1 | 2 3. Empty: the scheduler's own order. Playing the adversary (toolbar) writes one for you." },
+  { key: "schedule_repeat", group: "timing", label: "After the list", kind: "select", value: "repeat", local: true,
+    options: (v) => [["repeat", "Play it again"], ["round_robin", v.scheduler === "ssync" ? "Random rounds" : "Round-robin"]],
+    showIf: (v) => (v.scheduler === "sequential" || v.scheduler === "ssync") && v.schedule_text.trim() !== "", more: true,
+    hint: "What follows the end of the list. Playing it again needs every robot in it, to stay fair." },
   { key: "max_turns", group: "timing", label: "Turn limit", kind: "number", min: 0, max: 1000000000, value: 0,
     showIf: (v) => v.scheduler === "sequential",
     hint: "Stop after this many turns (one robot's whole Look, Compute and Move each). 0: no limit." },
+  { key: "max_rounds", group: "timing", label: "Round limit", kind: "number", min: 0, max: 1000000000, value: 0,
+    showIf: (v) => v.scheduler === "ssync" || v.scheduler === "fsync",
+    hint: "Stop after this many rounds. 0: no limit." },
   { key: "lambda_rate", group: "timing", label: "Activation rate λ", kind: "range", min: 0.1, max: 20, step: 0.1, value: 5,
-    enabledBy: (v) => v.scheduler !== "sequential" || v.turn_gap === "random",
+    enabledBy: (v) => v.scheduler === "async" || v.turn_gap === "random",
     hint: "Async: robots wake up after exponential delays with this rate (mean 1/λ). Sequential: the random pause between turns has this rate." },
   { key: "sampling_rate", group: "timing", label: "Sampling interval", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.1,
     hint: "Period of the scheduler's Visualize tick (kept for parity with the original)." },
@@ -163,6 +193,8 @@ export function buildSettings(root, onChange) {
         field.innerHTML = `<div class="field-top">${label(id)}</div><select id="${id}"></select>`;
       } else if (s.kind === "number") {
         field.innerHTML = `<div class="field-top">${label(id)}<input id="${id}" type="number" min="${s.min}" max="${s.max}" step="1">${s.dice ? `<button class="btn small outline" type="button" title="Random seed" aria-label="Random seed" data-icon="dice" data-size="15"></button>` : ""}</div>`;
+      } else if (s.kind === "line") {
+        field.innerHTML = `<div class="field-top">${label(id)}</div><input id="${id}" type="text" spellcheck="false" autocomplete="off" placeholder="empty: none">`;
       } else if (s.kind === "text") {
         // The editor opens in its own window; the panel shows a summary.
         field.innerHTML = `<div class="field-top">${label(`${id}-edit`)}<button id="${id}-edit" class="btn small outline" type="button">Edit…</button></div><div class="sub" id="${id}-summary"></div>`;
@@ -195,7 +227,7 @@ export function buildSettings(root, onChange) {
 
   function clamp(s, v) {
     if (s.kind === "switch") return Boolean(v);
-    if (s.kind === "text") return String(v);
+    if (s.kind === "text" || s.kind === "line") return String(v);
     if (s.kind === "select") { const opts = optionsOf(s); return opts.some(([o]) => o === v) ? v : opts[0]?.[0] ?? s.value; }
     let n = Number(v);
     if (!Number.isFinite(n)) n = s.value;
@@ -218,6 +250,7 @@ export function buildSettings(root, onChange) {
       sel.value = v;
     } else if (s.kind === "number") f.querySelector(`#${id}`).value = v;
     else if (s.kind === "text") { if (editor.text.value !== v) editor.text.value = v; }
+    else if (s.kind === "line") { const input = f.querySelector("input"); if (input.value !== v) input.value = v; }
     else {
       f.querySelector(`#${id}`).value = s.kind === "log" ? toLog(v, s) : v;
       f.querySelector(`#${id}-n`).value = v;
@@ -316,6 +349,7 @@ export function buildSettings(root, onChange) {
       if (s.key === "pattern" && e.target.value === "custom") editor.open(values.custom);
     });
     else if (s.kind === "text") f.querySelector("button").addEventListener("click", () => editor.open(values[s.key]));
+    else if (s.kind === "line") f.querySelector("input").addEventListener("change", (e) => set(s.key, e.target.value));
     else if (s.kind === "number") {
       f.querySelector(`#${id}`).addEventListener("change", (e) => set(s.key, e.target.value));
       f.querySelector("button")?.addEventListener("click", () => set(s.key, Math.floor(Math.random() * 1e9)));
@@ -377,6 +411,9 @@ export function readConfig(values, algorithm, customPoints = []) {
   config.visibility_radius = values.unlimited_visibility ? null : values.visibility_radius;
   config.delta = !values.rigid_movement && values.delta > 0 ? values.delta : null;
   config.max_turns = values.scheduler === "sequential" && values.max_turns > 0 ? values.max_turns : null;
+  config.max_rounds = (values.scheduler === "ssync" || values.scheduler === "fsync") && values.max_rounds > 0 ? values.max_rounds : null;
+  Object.assign(config, parseSchedule(values.schedule_text, values.scheduler));
+  if (config.schedule || config.rounds) config.schedule_end = values.schedule_repeat;
   config.open_world = values.open_world;
   config.start = null;
   config.initial_positions = null;
@@ -392,4 +429,28 @@ export function readConfig(values, algorithm, customPoints = []) {
     };
   }
   return config;
+}
+
+/** The explicit schedule typed in Settings → Scheduler, as SimConfig fields: `schedule` (sequential:
+ * "0, 2, 1@0.5") or `rounds` (SSYNC: "0 1 | 2 3"). Nothing for an empty line or another scheduler;
+ * the core reports robots that do not exist. */
+export function parseSchedule(text, scheduler) {
+  const words = (part) => part.split(/[\s,;]+/).filter(Boolean);
+  if (!text?.trim()) return {};
+  if (scheduler === "sequential") {
+    return {
+      schedule: words(text.replace(/\|/g, " ")).map((w) => {
+        const [robot, stop] = w.split("@");
+        return stop === undefined ? Number(robot) : { robot: Number(robot), stop: Number(stop) };
+      }),
+    };
+  }
+  if (scheduler === "ssync") return { rounds: text.split("|").map((part) => words(part).map(Number)).filter((r) => r.length) };
+  return {};
+}
+
+/** The other way round: a schedule as the line Settings → Scheduler takes. */
+export function formatSchedule(list, scheduler) {
+  if (scheduler === "ssync") return list.map((round) => round.join(" ")).join(" | ");
+  return list.map((a) => (typeof a === "number" ? String(a) : `${a.robot}@${+a.stop.toFixed(3)}`)).join(", ");
 }

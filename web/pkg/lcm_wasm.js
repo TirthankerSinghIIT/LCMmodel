@@ -1,6 +1,6 @@
 /**
  * `advance` result codes, shared with `web/worker.js`.
- * @enum {0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}
+ * @enum {0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}
  */
 export const Stop = Object.freeze({
     Budget: 0, "0": "Budget",
@@ -14,6 +14,11 @@ export const Stop = Object.freeze({
      * Only `advance_to_move` returns it: a robot has just started a move.
      */
     Moved: 7, "7": "Moved",
+    MaxRounds: 8, "8": "MaxRounds",
+    /**
+     * An `await` schedule waits for the next turn or round (adversary mode).
+     */
+    AwaitingSchedule: 9, "9": "AwaitingSchedule",
 });
 
 export class WasmSimulation {
@@ -61,6 +66,15 @@ export class WasmSimulation {
         return ret;
     }
     /**
+     * A schedule ending in `await` has run out: the run waits for the
+     * adversary's next turn (`push_turn`) or round (`push_round`).
+     * @returns {boolean}
+     */
+    awaiting_schedule() {
+        const ret = wasm.wasmsimulation_awaiting_schedule(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * Captures the state at the current time; read it with the getters below.
      */
     capture_frame() {
@@ -82,7 +96,7 @@ export class WasmSimulation {
         return ret !== 0;
     }
     /**
-     * Sequential scheduler: epochs in which every live robot has had its turn.
+     * Sequential and SSYNC/FSYNC: epochs in which every live robot has been active.
      * @returns {number}
      */
     epochs_completed() {
@@ -182,6 +196,14 @@ export class WasmSimulation {
         return ret;
     }
     /**
+     * SSYNC or FSYNC: robots act in rounds.
+     * @returns {boolean}
+     */
+    in_rounds() {
+        const ret = wasm.wasmsimulation_in_rounds(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * Per robot: 0 none, 1 blue, 2 red, 3 green.
      * @returns {Uint8Array}
      */
@@ -224,6 +246,49 @@ export class WasmSimulation {
         return this;
     }
     /**
+     * Where robot `i` would go if it looked now, `[x, y]`, without changing
+     * the run; empty if it would not compute (crashed, terminated, …).
+     * @param {number} i
+     * @returns {Float64Array}
+     */
+    preview_target(i) {
+        const ret = wasm.wasmsimulation_preview_target(this.__wbg_ptr, i);
+        var v1 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+        return v1;
+    }
+    /**
+     * Adds a round in which `robots` look and move together.
+     *
+     * # Errors
+     * Not an SSYNC run with `await` rounds, an empty round, or no such robot.
+     * @param {Uint32Array} robots
+     */
+    push_round(robots) {
+        const ptr0 = passArray32ToWasm0(robots, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmsimulation_push_round(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * Adds a turn for `robot`, stopped after `stop` of the way (NaN: let it
+     * arrive, or stop it as the stop policy says).
+     *
+     * # Errors
+     * Not a sequential run with an `await` schedule, no such robot, or a
+     * stopping point the movement settings do not allow.
+     * @param {number} robot
+     * @param {number} stop
+     */
+    push_turn(robot, stop) {
+        const ret = wasm.wasmsimulation_push_turn(this.__wbg_ptr, robot, stop);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
      * @returns {number}
      */
     robot_count() {
@@ -247,6 +312,22 @@ export class WasmSimulation {
         } finally {
             wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
+    }
+    /**
+     * SSYNC/FSYNC: rounds begun so far.
+     * @returns {number}
+     */
+    round_count() {
+        const ret = wasm.wasmsimulation_round_count(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * SSYNC/FSYNC: the robots active in the round under way.
+     * @returns {Uint32Array}
+     */
+    round_members() {
+        const ret = wasm.wasmsimulation_round_members(this.__wbg_ptr);
+        return ret;
     }
     /**
      * `true` under the sequential scheduler.
@@ -453,6 +534,36 @@ export function algorithms() {
 }
 
 /**
+ * Where `config_json`'s settings leave the model its algorithm was designed
+ * or proved for, as a JSON list of sentences (empty inside the model).
+ *
+ * # Errors
+ * Malformed JSON.
+ * @param {string} config_json
+ * @returns {string}
+ */
+export function notes(config_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(config_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.notes(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Runs a SqGathering `SimConfig` to the end: `{"report": …, "trace": [turn,
  * …]}` (`trace` empty unless `with_trace`). Same output as
  * `lcm seq --format json --trace FILE`.
@@ -498,6 +609,10 @@ function __wbg_get_imports() {
         },
         __wbg_new_from_slice_23f60f47cde8d664: function(arg0, arg1) {
             const ret = new Uint16Array(getArrayU16FromWasm0(arg0, arg1));
+            return ret;
+        },
+        __wbg_new_from_slice_37a3c3a194266cb8: function(arg0, arg1) {
+            const ret = new Uint32Array(getArrayU32FromWasm0(arg0, arg1));
             return ret;
         },
         __wbg_new_from_slice_9a868026ffa4208a: function(arg0, arg1) {
@@ -550,6 +665,11 @@ function getArrayU16FromWasm0(ptr, len) {
     return getUint16ArrayMemory0().subarray(ptr / 2, ptr / 2 + len);
 }
 
+function getArrayU32FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getUint32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
+}
+
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
@@ -583,12 +703,27 @@ function getUint16ArrayMemory0() {
     return cachedUint16ArrayMemory0;
 }
 
+let cachedUint32ArrayMemory0 = null;
+function getUint32ArrayMemory0() {
+    if (cachedUint32ArrayMemory0 === null || cachedUint32ArrayMemory0.byteLength === 0) {
+        cachedUint32ArrayMemory0 = new Uint32Array(wasm.memory.buffer);
+    }
+    return cachedUint32ArrayMemory0;
+}
+
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
     if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
+}
+
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -685,6 +820,7 @@ function __wbg_finalize_init(instance, module) {
     cachedFloat32ArrayMemory0 = null;
     cachedFloat64ArrayMemory0 = null;
     cachedUint16ArrayMemory0 = null;
+    cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;

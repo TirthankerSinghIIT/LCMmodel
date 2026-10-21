@@ -23,6 +23,8 @@
     <div class="brand"><span data-icon="logo" data-size="20"></span><span>LCM</span></div>
     <select id="algorithm" aria-label="Algorithm" title="Algorithm"></select>
     <button id="examples" class="btn" title="Ready-made setups for this algorithm" aria-label="Examples" aria-haspopup="menu" aria-expanded="false" aria-controls="examples_menu" hidden><span data-icon="list"></span><span class="label">Examples</span></button>
+    <button id="edit" class="btn" aria-pressed="false" title="Scenario editor: place, move, stack and remove robots by hand (D)" aria-label="Scenario editor"><span data-icon="pencil"></span><span class="label">Edit</span></button>
+    <button id="adversary" class="btn" aria-pressed="false" title="Play the adversary: choose who moves next, and where it stops (A). Sequential or SSYNC scheduler" aria-label="Play the adversary"><span data-icon="hand"></span><span class="label">Adversary</span></button>
     <div class="divider"></div>
     <button id="play" class="btn primary" title="Play (Space)" aria-label="Play"><span data-icon="play"></span><span class="label">Play</span></button>
     <button id="step_event" class="btn" title="Step one event (→)" aria-label="Step one event"><span data-icon="stepEvent"></span></button>
@@ -105,11 +107,18 @@
   <div id="overview" class="panel" aria-label="Overview map: the whole starting area, with a rectangle for the part you are looking at"><canvas id="overview_canvas"></canvas></div>
 
   <div id="turn_caption" class="panel" role="status" aria-live="polite" hidden></div>
+  <div id="adversary_panel" class="panel side-panel" aria-label="Play the adversary" hidden></div>
+  <div id="editor_panel" class="panel side-panel" aria-label="Scenario editor" hidden></div>
+  <div id="model_notes" class="panel" role="note" hidden></div>
 
   <div id="export_menu" class="panel menu" role="menu" hidden>
     <button class="btn" role="menuitem" data-export="png"><span data-icon="image"></span>Image of the view (PNG)</button>
     <button class="btn" role="menuitem" data-export="csv"><span data-icon="table"></span>Robot data (CSV)</button>
+    <button class="btn" role="menuitem" data-export="scenario"><span data-icon="download"></span>Scenario file (JSON)</button>
+    <button class="btn" role="menuitem" data-export="link"><span data-icon="links"></span>Copy a link to this scenario</button>
+    <button class="btn" role="menuitem" data-export="open"><span data-icon="list"></span>Open a scenario file…</button>
   </div>
+  <input id="scenario_file" type="file" accept=".json,application/json" hidden>
 
   <div id="examples_menu" class="panel menu" role="menu" aria-label="Examples" hidden></div>
 
@@ -138,6 +147,8 @@
         <span class="combo"><kbd>+</kbd> / <kbd>−</kbd></span><span>Zoom in / out (or scroll)</span>
         <span class="combo"><kbd>Drag</kbd></span><span>Pan · click a robot to inspect it</span>
         <span class="combo"><kbd>V</kbd></span><span>Show who sees whom (limited visibility)</span>
+        <span class="combo"><kbd>D</kbd></span><span>Scenario editor: click to add, drag to move, Shift + click to stack, Alt + click to remove</span>
+        <span class="combo"><kbd>A</kbd></span><span>Play the adversary: click a robot, then Enter (or click its path to stop it)</span>
         <span class="combo"><kbd>S</kbd></span><span>Show / hide settings</span>
         <span class="combo"><kbd>H</kbd></span><span>Hide panels (clean view)</span>
         <span class="combo"><kbd>E</kbd> / <kbd>Shift + E</kbd></span><span>Export PNG / CSV</span>

@@ -510,11 +510,15 @@ impl Simulation {
         self.turns.as_ref().map_or(0, |t| t.taken)
     }
 
-    /// Sequential scheduler: epochs in which every live robot has had its
-    /// turn. Always 0 for async.
+    /// Sequential and SSYNC/FSYNC schedulers: epochs in which every live
+    /// robot has been active. Always 0 for async.
     #[must_use]
     pub fn epochs_completed(&self) -> u64 {
-        self.turns.as_ref().map_or(0, |t| t.epochs_completed)
+        match (&self.turns, &self.rounds) {
+            (Some(t), _) => t.epochs_completed,
+            (None, Some(r)) => r.epochs_completed,
+            (None, None) => 0,
+        }
     }
 
     #[must_use]

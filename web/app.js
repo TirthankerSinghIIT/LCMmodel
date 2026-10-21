@@ -12,6 +12,8 @@ import { Inspector } from "./inspector.js";
 import { Overview } from "./overview.js";
 import { buildSettings, readConfig } from "./settings.js";
 import { parseCoordinates, startOutline } from "./start.js";
+import { Adversary } from "./adversary.js";
+import { ScenarioEditor } from "./editor.js";
 
 const $ = (id) => document.getElementById(id);
 renderIcons();
@@ -35,17 +37,106 @@ const inspector = new Inspector({
   onCenter: (x, y) => renderer.centerOn(x, y),
 });
 
+const adversary = new Adversary({
+  renderer, client, settings, panel: $("adversary_panel"), toast,
+  canAct: () => state === "ready" || state === "paused",
+  onPlay: () => setState("running"),
+});
+adversary.onLeave = () => setAdversary(false);
+const editor = new ScenarioEditor({
+  renderer, settings, panel: $("editor_panel"), toast,
+  rebuild: () => newRun({ quiet: true, keepView: true }),
+});
+editor.onAction = (action) => {
+  if (action === "done") setEditor(false);
+  else if (action === "save") exportScenario();
+  else if (action === "link") copyScenarioLink();
+};
+
+/** The scenario editor edits the start: it rebuilds the run (paused at t = 0) on every edit. */
+function setEditor(on) {
+  if (on && adversary.on) setAdversary(false);
+  if (on && state !== "ready" && !newRun({ quiet: true, keepView: true })) return;
+  if (on && state === "running") { client.pause(); setState("paused"); }
+  if (!editor.setOn(on)) return;
+  $("edit").setAttribute("aria-pressed", String(on));
+  $("canvas").classList.toggle("editing", on);
+  if (on && measure.on) setMeasure(false);
+  if (on) toast("Scenario editor: click to add robots, drag to move them");
+}
+
+/** Playing the adversary needs the sequential or SSYNC scheduler; it starts a new run that waits for each choice. */
+function setAdversary(on) {
+  if (on && editor.on) setEditor(false);
+  if (on && !adversary.supported) {
+    settings.set("scheduler", "sequential", false);
+    toast("Playing the adversary chooses turns: Scheduler set to Sequential (SSYNC works too)");
+  }
+  adversary.setOn(on);
+  $("adversary").setAttribute("aria-pressed", String(on));
+  $("canvas").classList.toggle("adversary", on);
+  if (on && measure.on) setMeasure(false);
+  if (state !== "loading") newRun({ quiet: true, keepView: true });
+}
+
+/** Where the settings leave the algorithm's model (from the core), shown under the toolbar. */
+function showNotes(notes) {
+  const el = $("model_notes");
+  el.hidden = !notes.length;
+  if (notes.length) {
+    el.innerHTML = notes.map((n) => `<div>${n.replace(/^(Outside the model|Experimental):/, "<strong>$1:</strong>")}</div>`).join("")
+      + `<button class="btn small outline close" type="button">Hide</button>`;
+    el.querySelector("button").addEventListener("click", () => { el.hidden = true; });
+  }
+}
+
+/* -------------------------------------------------------------- scenarios */
+// A scenario is the algorithm plus every setting: saved as a file, or carried in a link (#scenario=…).
+function scenario() {
+  return { format: "lcm-scenario", version: 1, algorithm: $("algorithm").value, settings: { ...settings.values } };
+}
+function applyScenario(sc) {
+  if (!sc || typeof sc !== "object" || !sc.settings) { toast("That is not a scenario file", true); return; }
+  if (sc.algorithm && algorithms.some((a) => a.key === sc.algorithm)) { $("algorithm").value = sc.algorithm; updateExamples(); }
+  const known = Object.fromEntries(Object.entries(sc.settings).filter(([k]) => k in settings.values));
+  settings.apply(known);
+  newRun();
+  toast("Scenario loaded");
+}
+const toBase64 = (text) => { const bytes = new TextEncoder().encode(text); let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const fromBase64 = (code) => new TextDecoder().decode(Uint8Array.from(atob(code.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
+function exportScenario() {
+  download(new Blob([JSON.stringify(scenario(), null, 2)], { type: "application/json" }), `${fileStem()}.scenario.json`);
+  toast("Saved the scenario");
+}
+function copyScenarioLink() {
+  const url = `${location.origin}${location.pathname}#scenario=${toBase64(JSON.stringify(scenario()))}`;
+  navigator.clipboard?.writeText(url).then(() => toast("Link copied: it opens this exact scenario"), () => toast(url));
+}
+$("scenario_file").addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  try { applyScenario(JSON.parse(await file.text())); } catch { toast("Could not read that scenario file", true); }
+});
+
 let resolveReady;
-window.lcm = { renderer, client, settings, parseCoordinates, stats: {}, ready: new Promise((r) => { resolveReady = r; }),
+window.lcm = { renderer, client, settings, parseCoordinates, adversary, editor, stats: {}, ready: new Promise((r) => { resolveReady = r; }),
   get state() { return state; } };
 
 /* ------------------------------------------------------------ run control */
-function config() { return readConfig(settings.values, $("algorithm").value, settings.customPoints); }
+function config() {
+  const c = readConfig(settings.values, $("algorithm").value, settings.customPoints);
+  // Playing the adversary: the run waits for each turn (or round) the user chooses.
+  if (adversary.on && c.scheduler === "sequential") { c.schedule = []; c.schedule_end = "await"; delete c.rounds; }
+  else if (adversary.on && c.scheduler === "ssync") { c.rounds = []; c.schedule_end = "await"; delete c.schedule; }
+  return c;
+}
 
 let fitPending = false; // fit the view to the new run's first frame
 
 /** Builds a new run from the settings; returns false if they can't make one. */
-function newRun({ quiet = false } = {}) {
+function newRun({ quiet = false, keepView = false } = {}) {
   clearTimeout(restartTimer);
   restartTimer = 0;
   const problem = settings.problem;
@@ -56,8 +147,10 @@ function newRun({ quiet = false } = {}) {
   const c = config();
   const v = settings.values;
   renderer.setOutline(v.open_world ? startOutline(v) : { kind: "rect", w: v.width_bound, h: v.height_bound, rotation: 0 });
-  fitPending = true;
+  fitPending = !keepView;
   inspector.leave(); // the robot under the pointer belonged to the old run
+  adversary.reset();
+  showNotes([]);
   renderer.options.visibility = c.visibility_radius;
   // "Who sees whom" means something only when robots see just a part of the swarm.
   const limitedSight = c.visibility_radius != null;
@@ -174,7 +267,39 @@ function step(unit) {
 const CHAIN = "-80, 10\n0, 0\n95, -5";
 const TWO_GROUPS = "-170, -10\n-150, 15\n-135, -20\n-160, 30\n150, -25\n165, 10\n135, 20\n170, -15";
 const GTC_SEQUENTIAL = { scheduler: "sequential", turn_gap: "none", rigid_movement: true, robot_speeds: 25 };
+// SqGathering: two multiplicities of two (robots 0, 1 and 2, 3), and two robots sharing a point with one alone.
+const TWO_PAIRS = "-64, 0\n-64, 0\n64, 0\n64, 0";
+const PAIR_AND_ONE = "-60, 0\n-60, 0\n60, 0";
+const SQ = { open_world: true, pattern: "custom", turn_gap: "none", robot_speeds: 20, unlimited_visibility: true, num_of_faults: 0, frames: "global", schedule_text: "" };
 const EXAMPLES = {
+  SqGathering: [
+    { label: "Rendezvous: two robots", note: "κ = 0: the active robot walks to the other one",
+      set: { ...SQ, custom: "-80, 0\n80, 0", scheduler: "sequential", multiplicity: "weak", rigid_movement: true } },
+    { label: "Lemma 8: SSYNC never gathers", note: "The adversary moves a whole multiplicity at once: two multiplicities, ever closer, never one",
+      set: { ...SQ, custom: TWO_PAIRS, scheduler: "ssync", multiplicity: "weak", rigid_movement: true, schedule_text: "0 1 | 2 3", schedule_repeat: "repeat", max_rounds: 16 } },
+    { label: "The same start, sequential", note: "One robot at a time: it gathers (Theorem 5)",
+      set: { ...SQ, custom: TWO_PAIRS, scheduler: "sequential", multiplicity: "weak", rigid_movement: true } },
+    { label: "Theorem 4: no multiplicity detection", note: "Every robot sees two points and goes to the other: the schedule 0, 2, 1 keeps them apart",
+      set: { ...SQ, custom: PAIR_AND_ONE, scheduler: "sequential", multiplicity: "none", rigid_movement: true, schedule_text: "0, 2, 1", schedule_repeat: "repeat", max_turns: 60 } },
+    { label: "Theorem 4 with weak detection", note: "The same schedule, with weak detection: the single robot joins the pair",
+      set: { ...SQ, custom: PAIR_AND_ONE, scheduler: "sequential", multiplicity: "weak", rigid_movement: true, schedule_text: "0, 2, 1", schedule_repeat: "repeat", max_turns: 60 } },
+    { label: "Limited visibility (open problem)", note: "Section 8.2: 30 robots, sight radius 120",
+      set: { open_world: true, pattern: "cloud", num_of_robots: 30, spread: 90, scheduler: "sequential", turn_gap: "none", multiplicity: "weak", unlimited_visibility: false, visibility_radius: 120, rigid_movement: true, schedule_text: "" } },
+  ],
+  Gathering: [
+    { label: "FSYNC: one round", note: "Everyone sees the same snapshot and walks to the same centroid",
+      set: { open_world: true, pattern: "cloud", num_of_robots: 20, spread: 120, scheduler: "fsync", turn_gap: "none", rigid_movement: true } },
+    { label: "SSYNC, a few robots per round", note: "Each robot is active with chance 0.3",
+      set: { open_world: true, pattern: "cloud", num_of_robots: 20, spread: 120, scheduler: "ssync", ssync_probability: 0.3, turn_gap: "none", rigid_movement: true, schedule_text: "" } },
+    { label: "Robots block the view", note: "Obstructed visibility, robot radius 4",
+      set: { open_world: true, pattern: "line", num_of_robots: 8, size: 300, scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 4, rigid_movement: true } },
+  ],
+  Spreading: [
+    { label: "Spreading in a box", note: "Robots start bunched and spread to cover the world",
+      set: { open_world: false, pattern: "cloud", num_of_robots: 30, spread: 40, width_bound: 400, height_bound: 400, frames: "global" } },
+    { label: "Disoriented robots", note: "Each robot samples a grid in its own frame: Spreading depends on the axes",
+      set: { open_world: true, pattern: "cloud", num_of_robots: 30, spread: 60, frames: "disoriented" } },
+  ],
   GoToCenter: [
     { label: "Three robots in a chain", note: "Limited sight: each robot sees only its neighbour", links: true,
       set: { open_world: true, pattern: "custom", custom: CHAIN, unlimited_visibility: false, visibility_radius: 100, ...GTC_SEQUENTIAL } },
@@ -263,6 +388,9 @@ client.on("ready", (list) => {
   $("algorithm").innerHTML = list.map((a) => `<option value="${a.key}">${a.name}</option>`).join("");
   updateExamples();
   $("loading_text").textContent = "Building the swarm…";
+  if (location.hash.startsWith("#scenario=")) {
+    try { applyScenario(JSON.parse(fromBase64(location.hash.slice(10)))); return; } catch { toast("The scenario in this link could not be read", true); }
+  }
   newRun();
 });
 
@@ -297,6 +425,9 @@ const RULES = {
   Gathering: "It goes to the average position of all the robots it sees (the centre of gravity).",
   SEC: "It goes to the nearest point of the smallest circle around the robots it sees.",
   GoToCenter: "It heads for the centre of the smallest circle around the robots it sees, but never so far that it could lose sight of a neighbour.",
+  SqGathering: "Algorithm 8: with one multiplicity it joins it (or stays on it); with several it leaves its own for the midpoint towards the closest point; with none it goes to the closest robot.",
+  Spreading: "It goes to the centre of the area closer to it than to any other robot (its Voronoi cell).",
+  TwoTask: "Red robots run SEC, blue robots run Gathering.",
 };
 const fmtNumber = (v) => (v === 0 ? "0" : v >= 1e-3 ? String(+v.toPrecision(3)) : v.toExponential(2));
 let endNote = null;   // "ended", "stalled" or null: which note is up
@@ -333,7 +464,7 @@ function updateCaption(f) {
   }
   el.hidden = false;
   endNote = null;
-  const who = `<strong>Turn ${(f.turns ?? 0).toLocaleString()}</strong> · Robot ${w.robot}`;
+  const who = `<strong>Turn ${(f.turns ?? 0).toLocaleString()}</strong> · Robot ${w.robot}`;  // turn pacing is sequential only
   const rule = RULES[$("algorithm").value] ?? "";
   el.innerHTML = w.phase === "decide"
     ? `<div class="cap-head">${who} looks and decides</div><div class="cap-body">${rule || "It looks at the others and picks its destination, the ✕."}</div>`
@@ -342,6 +473,9 @@ function updateCaption(f) {
 
 client.on("frame", (f) => {
   frame = f;
+  if (f.notes) showNotes(f.notes);
+  // The adversary's schedule ran out: the run waits, paused, for the next choice.
+  if (f.awaiting && !f.playing && state === "running") { client.stopPulling(); setState("paused"); }
   renderer.options.walk = f.walk ?? null;
   if (f.trace) trace.points = f.trace;
   updateCaption(f);
@@ -442,12 +576,14 @@ function updateHud(force = false) {
   if (!force && now - hudAt < 200) return;
   hudAt = now;
   if (now - fpsAt >= 1000) { fps = (draws * 1000) / (now - fpsAt); draws = 0; fpsAt = now; }
-  const statusText = {
+  let statusText = {
     loading: "Loading…", ready: "Ready", running: "Running", paused: "Paused",
     ended: frame?.ended ? "Ended · all terminated"
       : frame?.stop === "stalled" ? "Stalled · nothing can move any more"
-      : frame?.stop === "max-turns" ? "Stopped · turn limit reached" : `Stopped (${frame?.stop})`,
+      : frame?.stop === "max-turns" ? "Stopped · turn limit reached"
+      : frame?.stop === "max-rounds" ? "Stopped · round limit reached" : `Stopped (${frame?.stop})`,
   }[state];
+  if (state === "paused" && frame?.awaiting) statusText = adversary.mode === "ssync" ? "Your move · pick a round" : "Your move · pick a robot";
   $("hud_status").textContent = statusText;
   $("hud_status").className = `hud-status${state === "ended" ? " ended" : ""}`;
   if (!frame) return;
@@ -462,6 +598,7 @@ function updateHud(force = false) {
   drawTrace();
   $("hud_epochs_row").hidden = frame.epochs == null;
   if (frame.epochs != null) {
+    $("hud_epochs_row").querySelector(".k").textContent = frame.unit === "round" ? "Rounds · epochs" : "Turns · epochs";
     $("hud_epochs").textContent = frame.epochs.toLocaleString();
     $("hud_turns").textContent = (frame.turns ?? 0).toLocaleString();
   }
@@ -505,7 +642,7 @@ $("algorithm").addEventListener("change", () => {
   // An algorithm that only works under the sequential scheduler (SqGathering)
   // switches it on, rather than failing with the async default.
   const a = algorithms.find((x) => x.key === $("algorithm").value);
-  if (a?.sequential_only && settings.values.scheduler !== "sequential") {
+  if (a?.sequential_only && settings.values.scheduler === "async") {
     settings.set("scheduler", "sequential", false);
     toast(`${a.name} runs one robot at a time: Scheduler set to Sequential`);
   }
@@ -610,9 +747,10 @@ function toggleLinks() {
 
 $("export").addEventListener("click", (e) => { e.stopPropagation(); openExamples(false); $("export_menu").hidden = !$("export_menu").hidden; });
 document.addEventListener("click", () => { $("export_menu").hidden = true; openExamples(false); });
-for (const b of document.querySelectorAll("[data-export]")) {
-  b.addEventListener("click", () => (b.dataset.export === "png" ? exportPng() : exportCsv()));
-}
+const EXPORTS = { png: () => exportPng(), csv: () => exportCsv(), scenario: () => exportScenario(), link: () => copyScenarioLink(), open: () => $("scenario_file").click() };
+for (const b of document.querySelectorAll("[data-export]")) b.addEventListener("click", () => EXPORTS[b.dataset.export]());
+$("edit").addEventListener("click", () => setEditor(!editor.on));
+$("adversary").addEventListener("click", () => setAdversary(!adversary.on));
 
 function fileStem() {
   const c = config();
@@ -663,12 +801,23 @@ applyTheme(currentTheme());
 /* ---------------------------------------------- canvas: pan, zoom, pick */
 const canvas = $("canvas");
 let drag = null;
+let editDrag = false; // the scenario editor is dragging a robot
 canvas.addEventListener("pointerdown", (e) => {
-  drag = { x: e.clientX, y: e.clientY, moved: false };
+  const rect = canvas.getBoundingClientRect();
   canvas.setPointerCapture(e.pointerId);
+  if (editor.down(e.clientX - rect.left, e.clientY - rect.top, e)) { editDrag = true; return; }
+  drag = { x: e.clientX, y: e.clientY, moved: false };
+});
+canvas.addEventListener("contextmenu", (e) => {
+  if (!editor.on) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  editor.remove(renderer.pick(e.clientX - rect.left, e.clientY - rect.top, 10));
 });
 canvas.addEventListener("pointermove", (e) => {
   const rect = canvas.getBoundingClientRect();
+  if (editor.move(e.clientX - rect.left, e.clientY - rect.top)) return;
+  if (adversary.on && !drag) adversary.move(e.clientX - rect.left, e.clientY - rect.top);
   if (measure.on && !drag) {  // the ruler follows the pointer until its second point is placed
     measureHover(e.clientX - rect.left, e.clientY - rect.top);
     return;
@@ -688,8 +837,12 @@ canvas.addEventListener("pointermove", (e) => {
 });
 canvas.addEventListener("pointerup", (e) => {
   const rect = canvas.getBoundingClientRect();
+  if (editDrag) { editDrag = false; editor.up(); return; }
   if (drag && !drag.moved) {
-    if (measure.on) measureClick(e.clientX - rect.left, e.clientY - rect.top);
+    const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+    if (editor.on) editor.click(sx, sy, e);
+    else if (adversary.on) adversary.click(sx, sy);
+    else if (measure.on) measureClick(e.clientX - rect.left, e.clientY - rect.top);
     else inspector.select(renderer.pick(e.clientX - rect.left, e.clientY - rect.top));
   }
   drag = null;
@@ -750,12 +903,17 @@ window.addEventListener("keydown", (e) => {
     if (!$("shortcuts").hidden) openShortcuts(false);
     else if (!$("export_menu").hidden) $("export_menu").hidden = true;
     else if (!$("examples_menu").hidden) { openExamples(false); $("examples").focus(); }
+    else if (adversary.on && adversary.chosen.length) adversary.action("clear");
+    else if (editor.on) setEditor(false);
     else if (measure.on) { if (measure.a) { measure.a = measure.b = measure.hover = null; renderer.requestDraw(); } else setMeasure(false); }
     else inspector.select(-1);
     return;
   }
   const typing = e.target.closest?.("input, select, textarea");
+  if (editor.on && !typing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); editor.undo(); return; }
   if (settings.editor.isOpen || typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (editor.on && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); editor.remove(editor.hovered); return; }
+  if (adversary.on && e.key === "Enter" && !e.target.closest?.("button, a, summary")) { e.preventDefault(); adversary.action("play"); return; }
   // Space/Enter on a focused button already clicks it; don't toggle twice.
   if ((e.key === " " || e.key === "Enter") && e.target.closest?.("button, a, summary")) return;
   const actions = {
@@ -767,6 +925,8 @@ window.addEventListener("keydown", (e) => {
     g: toggleGrid, G: toggleGrid,
     o: toggleOverview, O: toggleOverview,
     m: toggleMeasure, M: toggleMeasure,
+    d: () => setEditor(!editor.on), D: () => setEditor(!editor.on),
+    a: () => setAdversary(!adversary.on), A: () => setAdversary(!adversary.on),
     "+": () => renderer.zoomAt(1.25), "=": () => renderer.zoomAt(1.25), "-": () => renderer.zoomAt(0.8),
     v: toggleLinks, V: toggleLinks,
     s: toggleSettings, S: toggleSettings,

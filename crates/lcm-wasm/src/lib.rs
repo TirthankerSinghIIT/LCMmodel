@@ -67,6 +67,20 @@ pub fn algorithms() -> String {
     serde_json::Value::Array(list).to_string()
 }
 
+/// Where `config_json`'s settings leave the model its algorithm was designed
+/// or proved for, as a JSON list of sentences (empty inside the model).
+///
+/// # Errors
+/// Malformed JSON.
+#[wasm_bindgen]
+pub fn notes(config_json: &str) -> Result<String, JsError> {
+    let config: SimConfig = serde_json::from_str(config_json)?;
+    Ok(serde_json::to_string(&lcm_algorithms::notes(
+        &config.algorithm,
+        &config,
+    ))?)
+}
+
 #[wasm_bindgen]
 pub struct WasmSimulation {
     sim: Simulation,
@@ -216,6 +230,69 @@ impl WasmSimulation {
         self.sim.sequential()
     }
 
+    /// SSYNC or FSYNC: robots act in rounds.
+    #[must_use]
+    pub fn in_rounds(&self) -> bool {
+        self.sim.in_rounds()
+    }
+
+    /// SSYNC/FSYNC: rounds begun so far.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn round_count(&self) -> f64 {
+        self.sim.round_count() as f64
+    }
+
+    /// SSYNC/FSYNC: the robots active in the round under way.
+    #[must_use]
+    pub fn round_members(&self) -> js_sys::Uint32Array {
+        let ids: Vec<u32> = self
+            .sim
+            .round_members()
+            .iter()
+            .map(|&i| u32::try_from(i).unwrap_or(u32::MAX))
+            .collect();
+        js_sys::Uint32Array::from(ids.as_slice())
+    }
+
+    /// A schedule ending in `await` has run out: the run waits for the
+    /// adversary's next turn (`push_turn`) or round (`push_round`).
+    #[must_use]
+    pub fn awaiting_schedule(&self) -> bool {
+        self.sim.awaiting_schedule()
+    }
+
+    /// Adds a turn for `robot`, stopped after `stop` of the way (NaN: let it
+    /// arrive, or stop it as the stop policy says).
+    ///
+    /// # Errors
+    /// Not a sequential run with an `await` schedule, no such robot, or a
+    /// stopping point the movement settings do not allow.
+    pub fn push_turn(&mut self, robot: u32, stop: f64) -> Result<(), JsError> {
+        let stop = stop.is_finite().then_some(stop);
+        self.sim.push_turn(robot as usize, stop)?;
+        Ok(())
+    }
+
+    /// Adds a round in which `robots` look and move together.
+    ///
+    /// # Errors
+    /// Not an SSYNC run with `await` rounds, an empty round, or no such robot.
+    pub fn push_round(&mut self, robots: &[u32]) -> Result<(), JsError> {
+        self.sim
+            .push_round(robots.iter().map(|&r| r as usize).collect())?;
+        Ok(())
+    }
+
+    /// Where robot `i` would go if it looked now, `[x, y]`, without changing
+    /// the run; empty if it would not compute (crashed, terminated, …).
+    pub fn preview_target(&mut self, i: u32) -> Box<[f64]> {
+        match self.sim.preview_target(i as usize) {
+            Some(p) => Box::new([p.x, p.y]),
+            None => Box::new([]),
+        }
+    }
+
     /// Sequential scheduler: turns taken so far (one per Look).
     #[must_use]
     #[allow(clippy::cast_precision_loss)]
@@ -223,7 +300,7 @@ impl WasmSimulation {
         self.sim.turn_count() as f64
     }
 
-    /// Sequential scheduler: epochs in which every live robot has had its turn.
+    /// Sequential and SSYNC/FSYNC: epochs in which every live robot has been active.
     #[must_use]
     #[allow(clippy::cast_precision_loss)]
     pub fn epochs_completed(&self) -> f64 {

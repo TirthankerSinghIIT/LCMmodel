@@ -92,7 +92,7 @@ export class Renderer {
     this.onFollowChange = null;
     // CSS px covered by floating panels; the world is fitted into what's left.
     this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
-    this.options = { showLights: false, visibility: null, links: false, allowedRegion: false, multiplicities: false, walk: null, grid: true, measure: null };
+    this.options = { showLights: false, visibility: null, links: false, allowedRegion: false, multiplicities: false, walk: null, grid: true, measure: null, adversary: null, editor: null };
     this.gridState = null; // what the last grid drawn looked like (for the page and its checks)
     this.frame = null;
     this.selected = -1;
@@ -715,6 +715,74 @@ export class Renderer {
         ctx.fillText(title, lx + 8, ly + 17);
         ctx.fillStyle = this.theme.text; ctx.globalAlpha = 0.75; ctx.font = "11px system-ui, sans-serif";
         ctx.fillText(detail, lx + 8, ly + 33);
+      }
+      ctx.restore();
+    }
+
+    // SSYNC/FSYNC: the robots of the round under way.
+    const members = frame.members;
+    if (members && members.length < n && n <= LOD.circles && !this.options.adversary) {
+      ctx.strokeStyle = this.theme.accent; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      for (const i of members) { const x = X(xy[2 * i]), y = Y(xy[2 * i + 1]); ctx.moveTo(x + Math.max(r, 2) + 4, y); ctx.arc(x, y, Math.max(r, 2) + 4, 0, 2 * Math.PI); }
+      ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    }
+
+    // Playing the adversary: the robots chosen, where the chosen one would go, and where a click would stop it.
+    const adv = this.options.adversary;
+    if (adv) {
+      const color = "#e11d48";
+      ctx.save();
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 3;
+      for (const i of adv.chosen) {
+        if (i >= n) continue;
+        ctx.beginPath(); ctx.arc(X(xy[2 * i]), Y(xy[2 * i + 1]), Math.max(r, 2) + 7, 0, 2 * Math.PI); ctx.stroke();
+      }
+      const p = adv.preview;
+      if (p && p.robot < n) {
+        const ax = X(xy[2 * p.robot]), ay = Y(xy[2 * p.robot + 1]), bx = WX(p.target[0]), by = WY(p.target[1]);
+        ctx.lineWidth = 2.2; ctx.setLineDash([7, 5]);
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+        ctx.lineWidth = 3.2;
+        ctx.beginPath(); ctx.moveTo(bx - 8, by - 8); ctx.lineTo(bx + 8, by + 8); ctx.moveTo(bx + 8, by - 8); ctx.lineTo(bx - 8, by + 8); ctx.stroke();
+        const len = Math.hypot(p.target[0] - frame.x(p.robot), p.target[1] - frame.y(p.robot)), delta = adv.nonRigid;
+        if (delta && len > delta) {  // the earliest point the adversary may stop it at
+          const t = delta / len, dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1;
+          const mx = ax + t * dx, my = ay + t * dy, nx = -dy / l, ny = dx / l;
+          ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx - nx * 8, my - ny * 8); ctx.lineTo(mx + nx * 8, my + ny * 8); ctx.stroke();
+        }
+        if (adv.hover) {
+          ctx.beginPath(); ctx.arc(WX(adv.hover[0]), WY(adv.hover[1]), 5, 0, 2 * Math.PI); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // The scenario editor: the robot being dragged, where it will land.
+    const editor = this.options.editor;
+    if (editor?.drag?.to && editor.drag.i < n) {
+      const i = editor.drag.i, [tx, ty] = editor.drag.to;
+      ctx.save();
+      ctx.strokeStyle = this.theme.accent; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(X(xy[2 * i]), Y(xy[2 * i + 1])); ctx.lineTo(WX(tx), WY(ty)); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(WX(tx), WY(ty), Math.max(r, 3) + 2, 0, 2 * Math.PI); ctx.stroke();
+      ctx.restore();
+    }
+    if (editor && editor.hovered >= 0 && editor.hovered < n && !editor.drag) {
+      const i = editor.hovered;
+      ctx.strokeStyle = this.theme.accent; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(X(xy[2 * i]), Y(xy[2 * i + 1]), Math.max(r, 2) + 5, 0, 2 * Math.PI); ctx.stroke(); ctx.lineWidth = 1;
+    }
+
+    // Robot numbers, when the swarm is small enough to read them and they matter (choosing turns, editing).
+    if ((adv || editor) && n <= 40) {
+      ctx.save();
+      ctx.font = "600 12px system-ui, sans-serif"; ctx.lineJoin = "round"; ctx.textBaseline = "alphabetic";
+      for (let j = 0; j < n; j++) {
+        const label = `R${j}`, lx = X(xy[2 * j]) + Math.max(r, 2) + 5, ly = Y(xy[2 * j + 1]) - Math.max(r, 2) - 5;
+        ctx.lineWidth = 4; ctx.strokeStyle = this.theme.bg; ctx.strokeText(label, lx, ly);
+        ctx.fillStyle = adv?.chosen.includes(j) ? "#e11d48" : this.theme.text; ctx.fillText(label, lx, ly);
       }
       ctx.restore();
     }

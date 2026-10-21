@@ -270,6 +270,19 @@ a.btn { text-decoration: none; }
 #settings:not([hidden]) ~ #turn_caption { left: 324px; width: min(500px, calc(100vw - 440px)); }
 #turn_caption .cap-head { font-weight: 650; }
 #turn_caption .cap-body { color: var(--text-2); line-height: 1.4; }
+/* Adversary and scenario-editor panels: where the turn caption sits, above it when both show. */
+.side-panel { left: 12px; bottom: 56px; width: min(520px, calc(100vw - 100px)); padding: 10px 14px; display: grid; gap: 6px; z-index: 6; }
+#settings:not([hidden]) ~ .side-panel { left: 324px; width: min(520px, calc(100vw - 440px)); }
+.side-panel .cap-head { font-weight: 650; }
+.side-panel .cap-body { color: var(--text-2); line-height: 1.4; }
+.side-panel code { font-size: 12px; overflow-wrap: anywhere; }
+.adv-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+#adversary_panel { border-left: 3px solid #e11d48; }
+#adversary_panel:not([hidden]) ~ #turn_caption, #editor_panel:not([hidden]) ~ #turn_caption { display: none; }
+#model_notes { top: calc(var(--top-h, 56px) + 8px); left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 8px 12px; display: grid; gap: 4px; z-index: 5; border-left: 3px solid var(--accent); font-size: 12.5px; line-height: 1.4; }
+#model_notes .close { justify-self: end; }
+#canvas.editing { cursor: copy; }
+#canvas.adversary { cursor: pointer; }
 
 /* scale bar in the status panel */
 #hud .scale { display: inline-flex; align-items: center; gap: 8px; }

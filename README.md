@@ -4,7 +4,7 @@ A simulator for Look-Compute-Move robots in the Asynchronous System
 
 ## Rust + WebAssembly version (branch `rust-core`)
 
-The simulator core has been ported to Rust and runs in the browser as WebAssembly, in a background worker, with **no Python or Pyodide**. The math is unchanged. The Rust core runs its own simulations from the settings (it does not need Python or any recorded data); to prove it matches, its tests run the same settings and seeds as recorded Python runs and compare the two event by event. So far the core and five algorithms (Gathering, Smallest Enclosing Circle, Uniform Circle Formation, Go-To-Center and SqGathering) are ported; the other algorithms follow.
+The simulator core has been ported to Rust and runs in the browser as WebAssembly, in a background worker, with **no Python or Pyodide**. The math is unchanged. The Rust core runs its own simulations from the settings (it does not need Python or any recorded data); to prove it matches, its tests run the same settings and seeds as recorded Python runs and compare the two event by event. So far the core and seven algorithms (Gathering, Smallest Enclosing Circle, Uniform Circle Formation, Go-To-Center, Spreading, TwoTask and SqGathering) are ported; PatternFormation follows.
 New in the Rust core: **SqGathering** (Algorithm 8 of the sequential-schedulers paper), below.
 
 **Try it** (no install, runs entirely in your browser, CPU only):
@@ -31,6 +31,8 @@ New in the Rust core: **SqGathering** (Algorithm 8 of the sequential-schedulers 
 - **Grid** (`G`): labelled lines that keep a sensible spacing (1, 2, 5, 10, …) at any zoom; the panel shows the spacing and how far in the view is.
 - **Overview map** (`O`, on wide screens): the starting area with a rectangle for what the view shows; click it to move there.
 - **Measure** (`M`): click two points or two robots to read the distance (a ruler stuck to robots follows them as they move; `Esc` clears).
+
+**Extended models** (details: [`docs/extended-models.md`](docs/extended-models.md)): SSYNC and FSYNC schedulers; multiplicity detection none / weak / strong; private coordinate frames per robot; obstructed visibility; Spreading and TwoTask ported. On the page: **Adversary** (`A`) lets you choose who moves next and where it stops, the **scenario editor** (`D`) places, moves, stacks and removes robots by hand, and scenarios can be saved, opened and shared as links. The SqGathering examples play out Lemma 8 (SSYNC) and Theorem 4 (no multiplicity detection).
 
 **What's where:** [`report.md`](report.md) is the full report (method, results, every test). [`docs/core-schema.md`](docs/core-schema.md) is the core's contract. The code is in `crates/` (Rust) and `web/` (browser page; `index.html` at the root opens it, the original page is in `old/`).
 
