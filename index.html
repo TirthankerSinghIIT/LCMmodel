@@ -100,7 +100,7 @@
     <button id="trails" class="btn" aria-pressed="true" title="Motion trails: each robot's recent path (P)" aria-label="Motion trails"><span data-icon="trail"></span></button>
     <button id="measure" class="btn" aria-pressed="false" title="Measure a distance: click a point or a robot, then a second one (M)" aria-label="Measure a distance"><span data-icon="ruler"></span></button>
     <button id="links" class="btn" aria-pressed="false" title="Show who sees whom: a line between robots that can see each other, orange when nearly out of sight (V). Only for a limited sight radius" aria-label="Show who sees whom" hidden><span data-icon="links"></span></button>
-    <button id="export" class="btn" title="Export" aria-label="Export" aria-haspopup="menu"><span data-icon="download"></span></button>
+    <button id="export" class="btn" title="Export and share" aria-label="Export and share" aria-haspopup="menu"><span data-icon="download"></span></button>
     <button id="fullscreen" class="btn" title="Full screen (Shift + F)" aria-label="Full screen" aria-pressed="false"><span data-icon="fullscreen"></span></button>
     <button id="theme" class="btn" title="Theme (T)" aria-label="Theme"><span data-icon="moon"></span></button>
     <button id="help" class="btn" title="Help: keyboard shortcuts (?)" aria-label="Help: keyboard shortcuts"><span data-icon="help"></span></button>
@@ -116,8 +116,9 @@
   <div id="export_menu" class="panel menu" role="menu" hidden>
     <button class="btn" role="menuitem" data-export="png"><span data-icon="image"></span>Image of the view (PNG)</button>
     <button class="btn" role="menuitem" data-export="csv"><span data-icon="table"></span>Robot data (CSV)</button>
-    <button class="btn" role="menuitem" data-export="scenario"><span data-icon="download"></span>Scenario file (JSON)</button>
-    <button class="btn" role="menuitem" data-export="link"><span data-icon="links"></span>Copy a link to this scenario</button>
+    <button class="btn" role="menuitem" data-export="link"><span data-icon="chain"></span>Copy link to this case</button>
+    <button class="btn" role="menuitem" data-export="embed"><span data-icon="code"></span>Embed in a web page…</button>
+    <button class="btn" role="menuitem" data-export="scenario"><span data-icon="download"></span>Save the scenario (JSON)</button>
     <button class="btn" role="menuitem" data-export="open"><span data-icon="list"></span>Open a scenario file…</button>
   </div>
   <input id="scenario_file" type="file" accept=".json,application/json" hidden>
