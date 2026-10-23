@@ -281,8 +281,38 @@ a.btn { text-decoration: none; }
 .adv-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 #adversary_panel { border-left: 3px solid #e11d48; }
 #adversary_panel:not([hidden]) ~ #turn_caption, #editor_panel:not([hidden]) ~ #turn_caption { display: none; }
-#model_notes { top: calc(var(--top-h, 56px) + 8px); left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 8px 12px; display: grid; gap: 4px; z-index: 5; border-left: 3px solid var(--accent); font-size: 12.5px; line-height: 1.4; }
-#model_notes .close { justify-self: end; }
+/* algorithm brief, under the toolbar: what it does, the model in chips, the notes; folds to one line while playing */
+#model_notes { top: calc(var(--top-h, 56px) + 8px); left: 50%; transform: translateX(-50%); width: min(600px, calc(100vw - 32px)); padding: 0; z-index: 5; font-size: 12.5px; line-height: 1.45; overflow: hidden; transition: width .2s ease; }
+#model_notes.folded { width: min(380px, calc(100vw - 32px)); }
+#model_notes .brief-head { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; font-weight: 650; font-size: 13px; color: var(--text); }
+#model_notes .brief-head:hover { background: var(--surface-2); }
+#model_notes .brief-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#model_notes .brief-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#model_notes .brief-head .chev { color: var(--text-3); transition: transform .15s; transform: rotate(90deg); }
+#model_notes.folded .brief-head .chev { transform: none; }
+#model_notes .brief-count { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 600; color: var(--text-3); }
+#model_notes .brief-count.warn { color: var(--warn-text); }
+#model_notes .brief-body { display: grid; gap: 9px; padding: 0 12px 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+#model_notes .brief-rule { margin: 0; color: var(--text-2); }
+#model_notes .brief-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); font-size: 11.5px; white-space: nowrap; }
+.chip-tag.locked { color: var(--accent); border-color: transparent; background: var(--accent-weak); }
+#model_notes .brief-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+#model_notes .brief-notes li { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; color: var(--text-2); }
+#model_notes .brief-notes li svg { flex: none; margin-top: 2px; color: var(--text-3); }
+#model_notes .brief-notes li.warn, #model_notes .brief-notes li.caution { color: var(--text); }
+#model_notes .brief-notes li.warn svg { color: var(--warn-text); }
+#model_notes .brief-notes li.caution svg { color: var(--accent); }
+#model_notes .brief-notes b { font-weight: 650; }
+
+/* settings tabs */
+.tabs { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin: 2px 2px 6px; padding: 3px; border-radius: 9px; background: var(--surface-2); }
+.tab { all: unset; box-sizing: border-box; position: relative; text-align: center; padding: 6px 4px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-2); cursor: pointer; transition: background .12s, color .12s; }
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { background: var(--surface-solid); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tab-lock { position: absolute; top: 5px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.tab-pane { display: grid; gap: 2px; }
 #canvas.editing { cursor: copy; }
 
 /* Settings the algorithm fixes: visible, locked, with the reason. */
@@ -292,10 +322,9 @@ a.btn { text-decoration: none; }
 .field .lock-note .lock { flex: none; }
 /* The "Advanced gathering" card at the top of the settings. */
 .algo-group > summary { color: var(--accent); }
-.algo-card { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--accent-weak); line-height: 1.4; }
-.algo-card .algo-name { font-weight: 650; }
-.algo-card .algo-rule { color: var(--text-2); font-size: 12px; }
-.algo-card .algo-locks { color: var(--accent); font-size: 11.5px; }
+.algo-card { display: flex; gap: 7px; align-items: flex-start; padding: 7px 10px; border-radius: 8px; background: var(--accent-weak); color: var(--accent); font-size: 12px; line-height: 1.4; }
+.algo-card svg { flex: none; margin-top: 2px; }
+.algo-card[hidden] { display: none; }
 #algorithm optgroup { font-style: normal; color: var(--text-3); }
 #algorithm option { color: var(--text); }
 #canvas.adversary { cursor: pointer; }
@@ -405,7 +434,7 @@ kbd { color: var(--text); font-family: var(--mono); font-size: 11.5px; padding: 
   .adv-actions .btn { flex: 1 1 auto; }
   /* While the adversary or editor panel is open, it takes the legend's place. */
   body:has(.side-panel:not([hidden])) #legend { display: none; }
-  #model_notes { left: 8px; right: 8px; transform: none; max-width: none; top: calc(var(--hud-bottom, 150px) + 6px); }
+  #model_notes, #model_notes.folded { left: 8px; right: 8px; transform: none; width: auto; max-width: none; top: calc(var(--hud-bottom, 150px) + 6px); max-height: calc(var(--tools-top, 100vh) - var(--hud-bottom, 150px) - 18px); overflow-y: auto; }
 }
 
 /* Tablets and small laptops: the side panels never run under the settings panel. */
@@ -413,7 +442,7 @@ kbd { color: var(--text); font-family: var(--mono); font-size: 11.5px; padding: 
   /* Mode panels stop short of the view tools in the bottom right. */
   .side-panel, #settings:not([hidden]) ~ .side-panel { width: auto; right: 104px; }
   /* Model notes: under the stats card, in the right-hand column. */
-  #model_notes { left: auto; right: 12px; transform: none; width: 220px; max-width: none; top: calc(var(--hud-bottom, 500px) + 8px); }
+  #model_notes, #model_notes.folded { left: auto; right: 12px; transform: none; width: 280px; max-width: none; top: calc(var(--hud-bottom, 500px) + 8px); max-height: calc(var(--tools-top, 100vh) - var(--hud-bottom, 500px) - 20px); overflow-y: auto; }
 }
 
 /* Touch screens: finger-sized targets. */

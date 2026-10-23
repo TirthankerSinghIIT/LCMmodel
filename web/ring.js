@@ -2,6 +2,7 @@
  * through the WasmRing binding of web/pkg. The page owns the start (nodes,
  * robots, order, ties); every change rebuilds the run from it. */
 import { icon, renderIcons } from "./icons.js";
+import { menuHtml } from "./menu.js";
 
 const $ = (id) => document.getElementById(id);
 renderIcons();
@@ -62,7 +63,37 @@ function step() {
   trace.push(t);
   state = JSON.parse(ring.state());
   draw(t);
+  if (t.from !== t.to) slide(t.from, t.to);
   return state.status === "running";
+}
+
+/* A robot that steps slides along the ring to its new node (skipped at high speed or with reduced motion). */
+let sliding = 0;
+function slide(from, to) {
+  cancelAnimationFrame(sliding);
+  const rate = Number($("speed").value), ms = Math.min(380, 700 / rate);
+  if (rate > 15 || matchMedia("(prefers-reduced-motion: reduce)").matches) { $("ring").querySelector(".arriving")?.classList.remove("arriving"); return; }
+  const n = start.nodes, R = 120, nodeR = Math.max(7, Math.min(16, 300 / n));
+  const a0 = -Math.PI / 2 + (2 * Math.PI * from) / n;
+  let d = (2 * Math.PI * (((to - from) % n + n) % n)) / n;
+  if (d > Math.PI) d -= 2 * Math.PI; // the short way round: one step either side
+  const svg = $("ring");
+  const ns = "http://www.w3.org/2000/svg";
+  const dot = document.createElementNS(ns, "circle");
+  dot.setAttribute("class", "robot mover");
+  dot.setAttribute("r", String(nodeR - 3));
+  dot.setAttribute("pointer-events", "none");
+  svg.append(dot);
+  const t0 = performance.now();
+  const frame = (now) => {
+    const k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2; // ease in and out
+    const a = a0 + d * e;
+    dot.setAttribute("cx", String(R * Math.cos(a)));
+    dot.setAttribute("cy", String(R * Math.sin(a)));
+    if (k < 1) sliding = requestAnimationFrame(frame);
+    else { dot.remove(); svg.querySelector(".arriving")?.classList.remove("arriving"); }
+  };
+  sliding = requestAnimationFrame(frame);
 }
 
 function play() {
@@ -78,7 +109,18 @@ function stop() {
   $("play").innerHTML = `${icon("play")}<span class="label">Play</span>`;
 }
 
-const STATUS = { running: "Running", gathered: "Gathered", stalled: "Stalled: a whole epoch without a move", incomplete: "Stopped at the epoch limit" };
+const STATUS = { running: "Running", gathered: "Gathered", stalled: "Stuck: a whole round without a move", incomplete: "Stopped at the round limit" };
+// The situation a robot sees (the algorithm's task, T1 to T8), and why it moves, in plain words.
+const SITUATION = {
+  T1: "Several gaps", T2: "One gap of 4 nodes or fewer, or none", T3: "One gap of 5 nodes or more",
+  T4: "Two gaps, one a single node", T5: "Two occupied nodes, one empty node between",
+  T6: "Three nodes in a row occupied", T7: "Two neighbouring nodes occupied", T8: "Gathered on one node",
+};
+const situation = (task) => SITUATION[task] ?? task ?? "—";
+const why = (rule) => {
+  const text = String(rule ?? "").replace(/^m\d+:\s*/, "").replace(/\bholes?\b/g, (w) => (w === "holes" ? "gaps" : "gap"));
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
 
 function draw(last = null) {
   const n = start.nodes, R = 120;
@@ -108,7 +150,9 @@ function draw(last = null) {
     if (!count[v]) continue;
     const [x, y] = at(v);
     const isNext = state && state.status === "running" && ids[v].includes(state.next);
-    svg += `<circle class="robot${isNext ? " next" : ""}${gathered ? " ring-gathered" : ""}" cx="${x}" cy="${y}" r="${nodeR - 3}" pointer-events="none"/>`;
+    // The robot that just stepped here alone appears when its slide arrives (see slide()).
+    const arriving = last && last.from !== last.to && last.to === v && count[v] === 1;
+    svg += `<circle class="robot${isNext ? " next" : ""}${gathered ? " ring-gathered" : ""}${arriving ? " arriving" : ""}" cx="${x}" cy="${y}" r="${nodeR - 3}" pointer-events="none"/>`;
     if (count[v] > 1) svg += `<text class="count" x="${x}" y="${y}" font-size="${font}">${count[v]}</text>`;
     const shown = ids[v].length <= (n > 20 ? 1 : 3) ? ids[v].map((r) => `R${r}`).join(" ") : `R${ids[v][0]} +${ids[v].length - 1}`;
     // Over 30 nodes, names are written only for the robot about to move; hover a node for the others.
@@ -125,21 +169,22 @@ function draw(last = null) {
 
   const facts = state ? [
     ["Status", STATUS[state.status] ?? state.status],
-    ["Epochs", `${state.epochs} (bound n − 3 = ${state.bound})`],
-    ["Activations", state.turns],
+    ["Rounds", `${state.epochs} <span class="muted">of at most ${state.bound}</span>`],
+    ["Turns taken", state.turns],
     ["Robots · occupied nodes", `${positions.length} · ${count.filter((c) => c).length}`],
     ["Next robot", state.status === "running" ? `R${state.next}` : "—"],
-    ["Its task", state.status === "running" ? state.task : "—"],
-    ["Its rule", state.status === "running" ? state.rule + (state.move === 2 ? " (the adversary picks the side)" : "") : "—"],
+    ["What it sees", state.status === "running" ? situation(state.task) : "—"],
+    ["What it does", state.status === "running" ? why(state.rule) + (state.move === 2 ? " (either side: ties decide)" : "") : "—"],
   ] : [["Robots", positions.length]];
   $("facts").innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
-  const why = state?.unsolvable;
-  $("warning").hidden = !why;
-  if (why) $("warning").innerHTML = `<strong>In the unsolvable set:</strong> ${why}. No algorithm gathers every such start under round robin, so GatheRRing is not expected to.`;
-  if (last) say(`R${last.robot}: ${last.from === last.to ? `stays on ${last.from}` : `${last.from} → ${last.to}`} · ${last.task} · ${last.rule}`);
+  const stuck = state?.unsolvable?.replace(/\s*\([^)]*\)\s*$/, "");
+  $("warning").hidden = !stuck;
+  if (stuck) $("warning").innerHTML = `<strong>No algorithm can gather this start</strong> (${stuck}): taking turns in some order keeps the robots apart for ever. Watch it fail, or change the start.`;
+  if (last) say(`<strong>R${last.robot}</strong> ${last.from === last.to ? `stays on node ${last.from}` : `steps ${last.from} → ${last.to}`} · ${why(last.rule)}`);
   else if (gathered) say("<strong>Gathered</strong>: every robot on one node.");
   $("trace").querySelector("tbody").innerHTML = trace.slice(-200).reverse().map((t) =>
-    `<tr class="${t.from !== t.to ? "moved" : ""}"><td>${t.turn}</td><td>${t.epoch}</td><td>R${t.robot}</td><td>${t.from === t.to ? `${t.from}` : `${t.from} → ${t.to}`}</td><td>${t.task}</td><td>${t.rule}</td></tr>`).join("");
+    `<tr class="${t.from !== t.to ? "moved" : ""}"><td>${t.turn}</td><td>${t.epoch}</td><td>R${t.robot}</td><td>${t.from === t.to ? `stays ${t.from}` : `${t.from} → ${t.to}`}</td><td>${situation(t.task)}</td><td>${why(t.rule)}</td></tr>`).join("");
+  $("turns_count").textContent = trace.length ? `· ${trace.length}${trace.length > 200 ? " (latest 200 shown; CSV has all)" : ""}` : "";
 }
 
 /* Editing the start: click a node to add a robot, right-click (or long-press) to take one off. */
@@ -237,6 +282,11 @@ apply(current());
   const module = await import(`./pkg/lcm_wasm.js${suffix}`);
   await module.default(`./pkg/lcm_wasm_bg.wasm${suffix}`);
   wasm = module;
+  // The simulator's menu: picking anything else opens the simulator on it.
+  const pick = $("algorithm_switch");
+  pick.innerHTML = menuHtml(JSON.parse(module.algorithms()));
+  pick.value = "ring";
+  pick.addEventListener("change", () => { if (pick.value !== "ring") location.href = `../?algorithm=${encodeURIComponent(pick.value)}`; });
   window.lcmRing = { get state() { return state; }, get trace() { return trace; }, step, rebuild, traceCsv, setStart: (s) => { start = s; $("nodes").value = s.nodes; rebuild(); } };
   $("preset").value = "0";
   $("preset").dispatchEvent(new Event("change"));

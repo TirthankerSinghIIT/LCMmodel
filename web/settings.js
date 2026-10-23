@@ -1,19 +1,22 @@
 /* Simulation settings, defined once. The panel is built from this list and
  * `readConfig()` turns it into the core's SimConfig (docs/core-schema.md §2),
  * so adding a setting is one entry here. */
+import { ADVANCED_VARIANTS } from "./menu.js";
 import { ARRANGEMENTS, ARRANGEMENT_LABELS, DISTRIBUTION_LABELS, PATTERNS, describeStart, distributionsFor, naturalDistribution, parseCoordinates } from "./start.js";
 
 export const GROUPS = [
-  // Shown only while "Advanced gathering" is the algorithm: its variant, what it fixes and what it guarantees.
+  // Shown only while "Advanced gathering" is the algorithm, above the tabs: its variant and what it fixes.
   { id: "algorithm", label: "Advanced gathering", open: true, showIf: (v) => v.family === "advanced", card: true },
-  { id: "swarm", label: "Swarm", open: true },
-  { id: "start", label: "Start", open: true, describe: true },
-  { id: "movement", label: "Movement", open: false },
-  { id: "visibility", label: "Visibility", open: true },
-  { id: "model", label: "Robot model · advanced", open: false },
-  { id: "faults", label: "Faults", open: false },
-  { id: "timing", label: "Scheduler", open: false },
+  { id: "swarm", label: "Swarm", open: true, tab: "robots" },
+  { id: "start", label: "Start", open: true, describe: true, tab: "robots" },
+  { id: "movement", label: "Movement", open: true, tab: "model" },
+  { id: "visibility", label: "Visibility", open: true, tab: "model" },
+  { id: "model", label: "Robot model", open: true, tab: "model" },
+  { id: "faults", label: "Faults", open: true, tab: "model" },
+  { id: "timing", label: "Scheduler", open: true, tab: "timing" },
 ];
+/** The settings panel's tabs: which robots and where they start; what a robot can do and see; when robots act. */
+export const TABS = [["robots", "Robots"], ["model", "Model"], ["timing", "Timing"]];
 
 const SHAPES = ["square", "rectangle", "circle", "polygon", "line"];
 const ROTATABLE = ["square", "rectangle", "line", "polygon", "clusters"];
@@ -26,13 +29,7 @@ const SIZE_LABEL = { square: "Side length", rectangle: "Width", circle: "Diamete
 // values; `note` is a line under the control; `showIf` hides a setting that
 // does not apply; `enabledBy` greys it out; `more` puts it under "More options"
 // (a function of the values, or true).
-/** The algorithms behind "Advanced gathering", as [registry key, label]. */
-export const ADVANCED_VARIANTS = [
-  ["CompassGathering", "Unreliable compasses · 2 robots"],
-  ["RandomizedGathering", "Randomized, λ ∈ {0, ½, 1} · 2 robots"],
-  ["RandomizedGatheringUniform", "Randomized, λ ∈ {1, ½, uniform} · 2 robots"],
-  ["CrashGathering", "Despite crash faults · weak multiplicity"],
-];
+export { ADVANCED_VARIANTS }; // defined with the menu (menu.js)
 
 export const SETTINGS = [
   { key: "variant", group: "algorithm", label: "Variant", kind: "select", value: "CompassGathering", local: true,
@@ -117,10 +114,10 @@ export const SETTINGS = [
     hint: "Robots block the view as discs of this radius. 0: points, which block only robots exactly in line behind them." },
   { key: "multiplicity", group: "model", label: "Multiplicity detection", kind: "select", value: "weak",
     options: [["none", "None: a shared point looks like any other"], ["local", "Local: only whether its own point is shared"], ["weak", "Weak: one robot, or more than one"], ["strong", "Strong: how many robots"]],
-    hint: "What a robot can tell about a point several robots share. SqGathering needs at least weak detection: without it, gathering is impossible under a sequential scheduler (Theorem 4). The ports of the original algorithms see every robot and ignore this." },
+    hint: "What a robot can tell about a point several robots share. SqGathering needs at least weak detection: without it, one robot at a time can never gather. The ports of the original algorithms see every robot and ignore this." },
   { key: "frames", group: "model", label: "Coordinate frames", kind: "select", value: "global",
     options: [["global", "Global: all robots share one frame"], ["rotated", "Own frame: random rotation and unit"], ["disoriented", "Disoriented: also random handedness"], ["compass", "Compass with an error of up to φ"]],
-    hint: "At each Look a robot can get a private coordinate system of its own, with itself at the origin. An algorithm that only uses distances and angles behaves the same; one that uses the axes (Spreading's grid) does not. Compass: the robot's north is off by at most φ (Izumi et al. 2012)." },
+    hint: "At each Look a robot can get a private coordinate system of its own, with itself at the origin. An algorithm that only uses distances and angles behaves the same; one that uses the axes (Spreading's grid) does not. Compass: the robot's north is off by at most φ." },
   { key: "compass_error", group: "model", label: "Compass error φ °", kind: "range", min: 0, max: 180, step: 1, value: 30,
     showIf: (v) => v.frames === "compass",
     hint: "The largest angle between a robot's north and the true north. Units and handedness stay shared." },
@@ -140,7 +137,7 @@ export const SETTINGS = [
     hint: "Async: every robot wakes on its own random clock, so many can be moving at once. Sequential: one robot does its whole Look, Compute and Move while every other robot stays still. SSYNC: in each round a set of robots looks at the same instant, then they all move; FSYNC: every robot, every round." },
   { key: "k_async", group: "timing", label: "k (Looks per cycle)", kind: "range", min: 1, max: 20, step: 1, value: 1,
     showIf: (v) => v.scheduler === "kasync",
-    hint: "k-ASYNC (Kirkpatrick et al. 2024): while one robot is in a cycle, no other robot starts more than k Looks. A Look that would is put off until a cycle ends." },
+    hint: "k-ASYNC: while one robot is in a cycle, no other robot starts more than k Looks. A Look that would is put off until a cycle ends." },
   { key: "ssync_probability", group: "timing", label: "Chance to be active", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.5,
     showIf: (v) => v.scheduler === "ssync",
     hint: "SSYNC: each robot still moving is active in a round with this chance. A round with nobody drawn activates one robot at random." },
@@ -199,6 +196,42 @@ export function buildSettings(root, onChange) {
   let summary = null; // the sentence saying what the start settings give
   let customResult = parseCoordinates(values.custom);
   const optionsOf = (s) => (typeof s.options === "function" ? s.options(values) : s.options);
+
+  // Tabs: a bar of three, one pane each; groups without a tab (the advanced variant) sit above them.
+  const tabBar = document.createElement("div");
+  tabBar.className = "tabs";
+  tabBar.setAttribute("role", "tablist");
+  const panes = {};
+  let tab = "robots";
+  try { tab = localStorage.getItem("lcm-settings-tab") || tab; } catch {}
+  if (!TABS.some(([id]) => id === tab)) tab = "robots";
+  for (const [id, label] of TABS) {
+    tabBar.insertAdjacentHTML("beforeend", `<button type="button" role="tab" class="tab" data-tab="${id}" id="tab-${id}" aria-controls="pane-${id}">${label}<span class="tab-lock" hidden></span></button>`);
+    const pane = document.createElement("div");
+    pane.className = "tab-pane";
+    pane.id = `pane-${id}`;
+    pane.dataset.tab = id;
+    pane.setAttribute("role", "tabpanel");
+    pane.setAttribute("aria-labelledby", `tab-${id}`);
+    panes[id] = pane;
+  }
+  function selectTab(id) {
+    tab = id;
+    for (const b of tabBar.querySelectorAll(".tab")) b.setAttribute("aria-selected", String(b.dataset.tab === id));
+    for (const [pid, pane] of Object.entries(panes)) pane.hidden = pid !== id;
+    try { localStorage.setItem("lcm-settings-tab", id); } catch {}
+  }
+  tabBar.addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) selectTab(b.dataset.tab); });
+  tabBar.addEventListener("keydown", (e) => {
+    const k = TABS.findIndex(([id]) => id === tab), d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const next = TABS[(k + d + TABS.length) % TABS.length][0];
+    selectTab(next);
+    tabBar.querySelector(`[data-tab="${next}"]`).focus();
+  });
+  let tabsPlaced = false;
+  const placeTabs = () => { if (!tabsPlaced) { root.append(tabBar, ...Object.values(panes)); tabsPlaced = true; } };
 
   for (const g of GROUPS) {
     const details = document.createElement("details");
@@ -259,7 +292,18 @@ export function buildSettings(root, onChange) {
       body.append(more);
       mores.push({ group: g.id, details: more, body: more.querySelector(".more-body"), main: body });
     }
-    root.append(details);
+    if (g.tab) { placeTabs(); panes[g.tab].append(details); } else root.append(details);
+  }
+  placeTabs();
+  selectTab(tab);
+  /** Marks the tabs holding a setting the chosen algorithm locks. */
+  function markTabs() {
+    for (const [id] of TABS) {
+      const locked = Object.keys(frozen).some((key) => byKey[key] && GROUPS.find((g) => g.id === byKey[key].group)?.tab === id);
+      const mark = tabBar.querySelector(`[data-tab="${id}"] .tab-lock`);
+      mark.hidden = !locked;
+      mark.title = locked ? "Some settings here are fixed by the algorithm" : "";
+    }
   }
   const editor = buildCoordinateEditor((text) => set("custom", text));
 
@@ -447,7 +491,10 @@ export function buildSettings(root, onChange) {
       frozen = locks;
       for (const s of SETTINGS) show(s.key);
       refresh();
+      markTabs();
     },
+    /** Shows a tab of the panel ("robots", "model" or "timing"). */
+    selectTab,
     get frozen() { return frozen; },
     /** Extra values the panel's conditions read (e.g. `family`), then re-draw. */
     setContext(extra) { Object.assign(values, extra); refresh(); },

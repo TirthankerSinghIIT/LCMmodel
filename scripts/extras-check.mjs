@@ -123,7 +123,7 @@ if (await js(`lcm.state === "running"`)) await js(`document.dispatchEvent(new Ke
 await js(`(() => { window.__why = null; lcm.client.on("robot", ({ info }) => { window.__why = info && info.why; }); lcm.client.inspect(0); })()`);
 await until("window.__why !== null", 5000);
 const why = await js(`window.__why`);
-check("inspector explains the robot's rule (compass gathering)", typeof why === "string" && why.includes("A_SS") && why.includes("By its own compass"), String(why));
+check("inspector explains the robot's rule (compass gathering)", typeof why === "string" && why.includes("fixed compass") && why.includes("By its own compass"), String(why));
 
 check("no console errors", consoleErrors.length === 0, consoleErrors.join(" | "));
 await finish();

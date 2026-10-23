@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ring gathering · LCM Simulator</title>
-  <meta name="description" content="GatheRRing (Navarra and Piselli): oblivious robots on a ring of nodes gather under a round-robin scheduler, turn by turn.">
+  <meta name="description" content="Robots on the nodes of a ring gather on one node, one robot at a time, seeing only which nodes are occupied.">
   <script>
     (() => {
       let t = "system";
@@ -19,47 +19,61 @@
 <body class="sqg">
   <header class="sqg-bar">
     <a class="btn" href="../" title="Back to the simulator"><span data-icon="logo" data-size="20"></span><span class="brand-name">LCM</span></a>
-    <span class="crumb">Gathering on a ring <span class="crumb-sub">GatheRRing · round robin · no multiplicity detection</span></span>
+    <!-- The simulator's Algorithm menu: another choice opens the simulator on it. -->
+    <select id="algorithm_switch" class="algo-switch" aria-label="Algorithm" title="Algorithm"><option value="ring">Gathering on a ring</option></select>
+    <span class="crumb-sub ring-sub">One robot at a time · robots see only which nodes are occupied</span>
     <span class="spacer"></span>
     <button id="theme" class="btn" title="Theme" aria-label="Theme"><span data-icon="moon"></span></button>
   </header>
 
-  <p class="sqg-note">
-    Robots sit on the nodes of a ring and see only <strong>which nodes are occupied</strong>: never how many robots a node holds.
-    They have no sense of direction. The round-robin scheduler activates them one at a time in a fixed order they do not know;
-    an activated robot stays or steps to a neighbouring node. Algorithm <em>GatheRRing</em> (Navarra &amp; Piselli, arXiv:2502.03939)
-    gathers them from every start outside the unsolvable set, in at most n − 3 epochs.
-    <span class="ring-help">Click a node to add a robot; right-click (or long-press) to remove one.</span>
+  <p class="sqg-note ring-lead">
+    Robots stand on the nodes of a ring. Each one sees <strong>which nodes are occupied</strong>, but not how many robots
+    share a node, and has no sense of left or right. They take turns in a fixed order they do not know; on its turn a robot
+    stays or steps to a neighbouring node. Every start gathers on one node within n − 3 rounds, except the few starts no
+    algorithm can gather, which the page flags.
   </p>
 
   <div class="sqg-main ring-main">
     <section class="sqg-stage panel-card" aria-label="The ring">
-      <div class="controls" role="toolbar" aria-label="Playback">
-        <label class="field compact"><span>Preset</span><select id="preset"></select></label>
-        <label class="field compact"><span>Nodes</span><input id="nodes" type="number" min="3" max="60" value="9"></label>
-        <label class="field compact"><span>Order</span><input id="order" type="text" placeholder="0, 1, 2, …" spellcheck="false"></label>
-        <label class="field compact"><span>Choices left open</span>
-          <select id="ties"><option value="next">Towards the next node</option><option value="random">At random (seed)</option></select>
-        </label>
-        <span class="spacer"></span>
-        <button id="reset" class="btn" title="Back to the start"><span data-icon="reset"></span><span class="label">Reset</span></button>
-        <button id="step" class="btn" title="One activation (→)"><span data-icon="stepEvent"></span><span class="label">Step</span></button>
-        <button id="play" class="btn primary" title="Play (Space)"><span data-icon="play"></span><span class="label">Play</span></button>
-        <label class="field compact ring-speed"><span>Speed <output id="speed_out">2 / s</output></span>
-          <input id="speed" type="range" min="0.5" max="30" step="0.5" value="2" aria-label="Activations per second"></label>
-        <button id="clear" class="btn outline" title="Remove every robot">Clear</button>
-        <button id="csv" class="btn outline" title="Download every turn so far as CSV"><span data-icon="download"></span><span class="label">CSV</span></button>
+      <div class="ring-toolbar">
+        <div class="ring-group" role="group" aria-label="Start">
+          <span class="ring-group-label">Start</span>
+          <label class="field compact"><span>Preset</span><select id="preset"></select></label>
+          <label class="field compact"><span>Nodes</span><input id="nodes" type="number" min="3" max="60" value="9"></label>
+          <label class="field compact" title="The order robots take turns in, e.g. 2, 0, 1 (empty: by number)"><span>Turn order</span><input id="order" type="text" placeholder="0, 1, 2, …" spellcheck="false"></label>
+          <label class="field compact" title="When both directions are equally good, which one the robot takes"><span>Ties</span>
+            <select id="ties"><option value="next">Clockwise</option><option value="random">At random</option></select>
+          </label>
+          <button id="clear" class="btn outline" title="Remove every robot">Clear</button>
+        </div>
+        <div class="ring-group" role="group" aria-label="Playback">
+          <span class="ring-group-label">Play</span>
+          <button id="reset" class="btn" title="Back to the start"><span data-icon="reset"></span><span class="label">Reset</span></button>
+          <button id="step" class="btn" title="One turn (→)"><span data-icon="stepEvent"></span><span class="label">Step</span></button>
+          <button id="play" class="btn primary" title="Play (Space)"><span data-icon="play"></span><span class="label">Play</span></button>
+          <label class="field compact ring-speed"><span>Speed <output id="speed_out">2 / s</output></span>
+            <input id="speed" type="range" min="0.5" max="30" step="0.5" value="2" aria-label="Turns per second"></label>
+          <button id="csv" class="btn outline" title="Download every turn so far as CSV"><span data-icon="download"></span><span class="label">CSV</span></button>
+        </div>
       </div>
       <svg id="ring" viewBox="-160 -160 320 320" role="img" aria-label="Ring of nodes with robots"></svg>
       <div id="ring_status" class="ring-status" role="status" aria-live="polite"></div>
+      <ul class="ring-key" aria-label="Key">
+        <li><span class="key-dot robot"></span>Robot</li>
+        <li><span class="key-dot next"></span>Its turn next</li>
+        <li><span class="key-dot empty"></span>Empty node</li>
+        <li><span class="key-dot gap"></span>Biggest gap</li>
+        <li><span class="key-arrow"></span>Where it will step</li>
+        <li class="ring-help">Click a node to add a robot · right-click or long-press to remove one</li>
+      </ul>
     </section>
 
     <section class="panel-card ring-side" aria-label="What happens">
       <h3>Now</h3>
       <dl id="facts" class="ring-facts"></dl>
       <div id="warning" class="ring-warning" hidden></div>
-      <h3>Turns</h3>
-      <div class="ring-table-wrap"><table id="trace" class="ring-trace"><thead><tr><th>#</th><th>Epoch</th><th>Robot</th><th>Move</th><th>Task</th><th>Rule</th></tr></thead><tbody></tbody></table></div>
+      <h3>Turns <span class="ring-count" id="turns_count"></span></h3>
+      <div class="ring-table-wrap"><table id="trace" class="ring-trace"><thead><tr><th>#</th><th>Round</th><th>Robot</th><th>Move</th><th>Situation</th><th>Why</th></tr></thead><tbody></tbody></table></div>
     </section>
   </div>
 

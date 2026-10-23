@@ -45,6 +45,8 @@ export const COLORS = [
 ];
 // Motion trails and decision pulses are drawn up to these swarm sizes (they cost a path per robot).
 const TRAIL_MAX = 1500, TRAIL_LEN = 28, PULSE_MAX = 200, PULSE_MS = 650, HALO_MS = 1800;
+// Swarms up to this size glide between frames; bigger ones move in steps too small to notice, so they skip it.
+const GLIDE_MAX = 4000;
 const C = Object.fromEntries(COLORS.map((c, i) => [c.key, i]));
 export const LIGHTS = [null, "#3b82f6", "#ef4444", "#22c55e"];
 
@@ -104,6 +106,11 @@ export class Renderer {
     this.halo = 0; // when the swarm finished (a green halo fades out), 0 if none
     this.gridState = null; // what the last grid drawn looked like (for the page and its checks)
     this.frame = null;
+    // Gliding: frames reach the page in bursts (two at once, then a gap), so robots are drawn sliding from
+    // where they were shown towards the newest frame over about one frame interval, instead of jumping.
+    this.viewTarget = null; // the region a fitted view is widening towards (keepInView)
+    this.glide = { from: null, n: -1, run: -1, t0: 0, dur: 0, gap: 16, arrived: 0, xy: null };
+    this.reduceMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.selected = -1;
     this.hovered = -1;
     this.colorOf = new Uint8Array(0);
@@ -148,11 +155,62 @@ export class Renderer {
 
   setFrame(frame) {
     const prev = this.frame;
+    this.startGlide(frame, prev);
     this.frame = frame;
     this.recordMotion(frame, prev);
     if (frame.ended && !(prev && prev.ended) && frame.terminated === frame.flags.length && frame.flags.length > 1) this.halo = performance.now();
     if (this.follow) this.measureSwarm();
     this.requestDraw();
+  }
+
+  /** Where robots are drawn now, as absolute positions (f64), or null before the first frame. */
+  shownAbsolute() {
+    const g = this.glide, f = this.frame;
+    if (!f) return null;
+    const n = f.flags.length, ox = f.originX ?? 0, oy = f.originY ?? 0;
+    const t = g.from && g.dur > 0 ? Math.min(1, (performance.now() - g.t0) / g.dur) : 1;
+    const k = t * (2 - t); // the same easing as drawnXY, so a new glide starts exactly where robots are
+    const out = new Float64Array(2 * n);
+    for (let i = 0; i < 2 * n; i += 2) {
+      const tx = ox + f.xy[i], ty = oy + f.xy[i + 1];
+      out[i] = g.from ? g.from[i] + (tx - g.from[i]) * k : tx;
+      out[i + 1] = g.from ? g.from[i + 1] + (ty - g.from[i + 1]) * k : ty;
+    }
+    return out;
+  }
+
+  /** Starts a glide from where robots are drawn to `frame`; snaps for a new run, another robot count or time
+   * going back, with reduced motion, or for swarms too big to be worth it. */
+  startGlide(frame, prev) {
+    const g = this.glide, now = performance.now(), n = frame.flags.length;
+    const same = prev && prev.run === frame.run && prev.flags.length === n && frame.time >= prev.time;
+    if (same && frame.time > prev.time) {
+      // Average time between frames that moved the run on: the length of one glide.
+      if (g.arrived) g.gap = 0.8 * g.gap + 0.2 * Math.min(250, now - g.arrived);
+      g.arrived = now;
+    }
+    if (!same || this.reduceMotion || n > GLIDE_MAX) { g.from = null; g.dur = 0; g.arrived = same ? g.arrived : 0; return; }
+    if (frame.time === prev.time && !g.from) return;
+    g.from = this.shownAbsolute();
+    g.t0 = now;
+    g.dur = Math.min(150, 1.5 * g.gap);
+  }
+
+  /** The frame's offsets as drawn at this instant (gliding), relative to the frame's origin. */
+  drawnXY(frame) {
+    const g = this.glide;
+    if (!g.from || g.dur <= 0) return frame.xy;
+    const k = Math.min(1, (performance.now() - g.t0) / g.dur);
+    if (k >= 1) { g.from = null; return frame.xy; }
+    const n2 = frame.xy.length, ox = frame.originX ?? 0, oy = frame.originY ?? 0;
+    if (!g.xy || g.xy.length !== n2) g.xy = new Float32Array(n2);
+    const e = k * (2 - k); // ease out: quick to start, gentle to land
+    for (let i = 0; i < n2; i += 2) {
+      g.xy[i] = (g.from[i] - ox) + (frame.xy[i] - (g.from[i] - ox)) * e;
+      g.xy[i + 1] = (g.from[i + 1] - oy) + (frame.xy[i + 1] - (g.from[i + 1] - oy)) * e;
+    }
+    this.requestDraw();
+    return g.xy;
   }
 
   /** Forget trails, pulses and the halo (a new run). */
@@ -259,9 +317,37 @@ export class Renderer {
   }
   /** The region "Fit" frames: w × h world units centred on (cx, cy). */
   setView(w, h, cx = 0, cy = 0) {
+    this.viewTarget = null;
     const fitted = this.isFitted();
     this.world = { w: Math.max(1e-6, w), h: Math.max(1e-6, h), cx, cy };
     if (fitted && !this.follow) this.fitView(); else this.requestDraw();
+  }
+  /** Keep in view: while the view is fitted (the user has not panned or zoomed) and not following, widen the
+   * region smoothly so every robot of `frame` stays inside, with a margin. Never narrows it. */
+  keepInView(frame) {
+    if (this.follow || !this.isFitted() || !frame) return;
+    const { xy, flags } = frame, ox = frame.originX ?? 0, oy = frame.originY ?? 0, w = this.world;
+    let x0 = w.cx - w.w / 2, x1 = w.cx + w.w / 2, y0 = w.cy - w.h / 2, y1 = w.cy + w.h / 2, out = false;
+    for (let i = 0, n = flags.length; i < n; i++) {
+      const x = ox + xy[2 * i], y = oy + xy[2 * i + 1];
+      if (x < x0 || x > x1 || y < y0 || y > y1) { out = true; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    }
+    if (!out) return;
+    const mx = 0.15 * (x1 - x0), my = 0.15 * (y1 - y0);
+    this.viewTarget = { w: x1 - x0 + 2 * mx, h: y1 - y0 + 2 * my, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+    this.requestDraw();
+  }
+  /** One step of a widening view (see keepInView), called from draw(). */
+  stepViewTarget() {
+    const t = this.viewTarget;
+    if (!t) return;
+    if (this.follow || !this.isFitted()) { this.viewTarget = null; return; }
+    const w = this.world, k = 0.18;
+    const next = { w: w.w + (t.w - w.w) * k, h: w.h + (t.h - w.h) * k, cx: w.cx + (t.cx - w.cx) * k, cy: w.cy + (t.cy - w.cy) * k };
+    const done = Math.abs(next.w - t.w) < 1e-3 * t.w && Math.abs(next.h - t.h) < 1e-3 * t.h;
+    this.world = done ? { ...t } : next;
+    this.fitView();
+    if (done) this.viewTarget = null; else this.requestDraw();
   }
   /** The start-area outline (see startOutline in start.js), or null for none. */
   setOutline(outline) { this.outline = outline; this.requestDraw(); }
@@ -505,6 +591,7 @@ export class Renderer {
     ctx.fillRect(0, 0, this.width, this.height);
 
     if (this.follow && frame) this.stepFollow();
+    else this.stepViewTarget();
     const s = this.scale;
     const ox = this.width / 2 + this.pan.x;
     const oy = this.height / 2 + this.pan.y;
@@ -544,7 +631,8 @@ export class Renderer {
     }
     if (!frame) { this.lastDrawMs = performance.now() - t0; return; }
 
-    const { xy, flags, fault, task, light, target, circle } = frame;
+    const { flags, fault, task, light, target, circle } = frame;
+    const xy = this.drawnXY(frame);
     // The frame's numbers are offsets from its origin (see Frame in lcm-core): add the origin
     // here in f64, so a swarm far from (0, 0) and tiny next to that distance stays distinct.
     const fx = ox + ((frame.originX ?? 0) - this.anchor.x) * s, fy = oy - ((frame.originY ?? 0) - this.anchor.y) * s;
@@ -846,7 +934,30 @@ export class Renderer {
 
     // Unreliable compasses: each robot's own north, a short needle (the true north is straight up).
     const compass = frame.compass;
-    if (compass && compass.length === n && n <= 300) {
+    if (compass && compass.length === n && n <= 12) {
+      // A few robots: a small compass around each. The shaded wedge is where its north may point (true north
+      // ± the error), the grey tick is true north, the red needle the north this robot reads now.
+      const R = Math.max(r, 3) + 22, phi = ((this.options.compassError ?? 0) * Math.PI) / 180;
+      ctx.save();
+      ctx.font = "600 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (let i = 0; i < n; i++) {
+        const x = X(xy[2 * i]), y = Y(xy[2 * i + 1]), a = compass[i];
+        ctx.strokeStyle = "rgba(148,163,184,.35)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(x, y, R, 0, 2 * Math.PI); ctx.stroke();
+        if (phi > 0) {
+          ctx.fillStyle = "rgba(239,68,68,.13)";
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, R, -Math.PI / 2 - Math.min(phi, Math.PI), -Math.PI / 2 + Math.min(phi, Math.PI)); ctx.closePath(); ctx.fill();
+        }
+        ctx.strokeStyle = "rgba(148,163,184,.8)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, y - R + 5); ctx.lineTo(x, y - R - 3); ctx.stroke();
+        const tx = x - R * Math.sin(a), ty = y - R * Math.cos(a);
+        ctx.strokeStyle = "rgba(239,68,68,.95)"; ctx.fillStyle = "rgba(239,68,68,.95)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x - (Math.max(r, 2) + 2) * Math.sin(a), y - (Math.max(r, 2) + 2) * Math.cos(a)); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, 2 * Math.PI); ctx.fill();
+        ctx.fillText("N", x - (R + 9) * Math.sin(a), y - (R + 9) * Math.cos(a));
+      }
+      ctx.restore();
+    } else if (compass && compass.length === n && n <= 300) {
       ctx.save();
       ctx.strokeStyle = "rgba(220,60,60,.85)"; ctx.lineWidth = 1.5;
       ctx.beginPath();

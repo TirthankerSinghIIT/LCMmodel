@@ -30,3 +30,32 @@
 .controls input[type="text"] { width: 120px; }
 .ring-speed input { width: 110px; }
 .ring-speed output { display: inline-block; min-width: 3.4em; font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+/* Top bar: the simulator's Algorithm menu */
+.algo-switch { height: 32px; max-width: 240px; padding: 0 28px 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-solid); color: var(--text); font: inherit; font-weight: 600; }
+.ring-sub { margin-left: 4px; }
+.ring-lead { font-size: 13.5px; }
+
+/* Controls: two groups, Start and Play */
+.ring-toolbar { display: grid; gap: 8px; }
+.ring-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 8px; border-radius: 10px; background: var(--surface-2); }
+.ring-group-label { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); min-width: 34px; }
+.ring-group .field.compact span { color: var(--text-2); font-size: 12px; }
+
+/* Key under the ring */
+.ring-key { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin: 6px 0 0; padding: 0; font-size: 12px; color: var(--text-2); }
+.ring-key li { display: inline-flex; align-items: center; gap: 6px; }
+.ring-key .ring-help { flex-basis: 100%; justify-content: center; color: var(--text-3); margin-top: 2px; }
+.key-dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--text-3); display: inline-block; }
+.key-dot.robot { background: var(--sg-single); border-color: var(--text); }
+.key-dot.next { background: var(--sg-active); border-color: var(--text); }
+.key-dot.empty { background: var(--surface-solid); }
+.key-dot.gap { background: var(--sg-multi-weak); }
+.key-arrow { width: 18px; height: 3px; border-radius: 2px; background: var(--sg-active); position: relative; }
+.key-arrow::after { content: ""; position: absolute; right: -4px; top: -3px; border: 4.5px solid transparent; border-left-color: var(--sg-active); }
+
+.ring-count { color: var(--text-3); font-weight: 400; }
+.ring-facts .muted { color: var(--text-3); }
+#ring .robot, #ring .count, #ring .ids { transition: none; }
+#ring .robot.mover { fill: var(--sg-active); stroke: var(--surface-solid); stroke-width: 2; opacity: .9; }
+#ring .robot.arriving { opacity: 0; }

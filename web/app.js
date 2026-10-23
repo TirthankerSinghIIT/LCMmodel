@@ -10,7 +10,8 @@ import { COLORS, LOD, Renderer, fmtDistance, ulpOf } from "./renderer.js";
 import { SimClient } from "./client.js";
 import { Inspector } from "./inspector.js";
 import { Overview } from "./overview.js";
-import { ADVANCED_VARIANTS, SETTINGS, buildSettings, readConfig } from "./settings.js";
+import { SETTINGS, buildSettings, readConfig } from "./settings.js";
+import { ADVANCED, MENU_NAMES, menuHtml } from "./menu.js";
 import { parseCoordinates, startOutline } from "./start.js";
 import { Adversary } from "./adversary.js";
 import { ScenarioEditor } from "./editor.js";
@@ -79,16 +80,61 @@ function setAdversary(on) {
   if (state !== "loading") newRun({ quiet: true, keepView: true });
 }
 
-/** Where the settings leave the algorithm's model (from the core), shown under the toolbar. */
-function showNotes(notes) {
-  const el = $("model_notes");
-  el.hidden = !notes.length;
-  if (notes.length) {
-    el.innerHTML = notes.map((n) => `<div>${n.replace(/^(Outside the model|Experimental):/, "<strong>$1:</strong>")}</div>`).join("")
-      + `<button class="btn small outline close" type="button">Hide</button>`;
-    el.querySelector("button").addEventListener("click", () => { el.hidden = true; });
-  }
+/* --------------------------------------------------------- algorithm brief */
+// The box under the toolbar: what the chosen algorithm does, the robots and model this run uses (settings the
+// algorithm fixes carry a lock), and, from the core with the run's first frame, where the settings leave what
+// the algorithm was made for. It folds to one line while a run plays; a click opens it again.
+const brief = { notes: [], open: true };
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const SCHEDULER_WORDS = { async: "Async", sequential: "One at a time", ssync: "Some at once · SSYNC", fsync: "All at once · FSYNC", kasync: "k-ASYNC" };
+const MULTIPLICITY_WORDS = { none: "Can't see stacks", local: "Knows if its own spot is shared", weak: "Sees stacks", strong: "Counts stacks" };
+const NOTE_KINDS = [
+  [/^Outside the model:\s*/, "warn", "Outside its design"],
+  [/^Experimental:\s*/, "caution", "Experimental"],
+  [/^(Approximation|Simplification):\s*/, "info", "Simplified"],
+];
+/** The chips: [text, setting key or null]; a key the algorithm locks gets the lock. */
+function briefChips(v, key) {
+  const a = algorithms.find((x) => x.key === key);
+  const n = v.pattern === "custom" ? (settings.customPoints?.length ?? v.num_of_robots) : v.num_of_robots;
+  const chips = [[`${n} robot${n === 1 ? "" : "s"}`, "num_of_robots"], [SCHEDULER_WORDS[v.scheduler] ?? v.scheduler, "scheduler"]];
+  chips.push([v.unlimited_visibility ? "Sees everyone" : `Sight ${v.visibility_radius}`, "unlimited_visibility"]);
+  if (v.obstructed_visibility) chips.push(["Robots block the view", "obstructed_visibility"]);
+  if (a?.multiplicities || LOCKS[key]?.multiplicity) chips.push([MULTIPLICITY_WORDS[v.multiplicity], "multiplicity"]);
+  if (v.frames === "compass") chips.push([`Compass off by up to ${v.compass_error}° · ${v.compass_static ? "fixed" : "changes each look"}`, "frames"]);
+  else if (v.frames !== "global") chips.push([v.frames === "rotated" ? "Own frame per robot" : "Disoriented robots", "frames"]);
+  if (v.num_of_faults > 0) chips.push([`${v.num_of_faults} ${v.fault_type} fault${v.num_of_faults === 1 ? "" : "s"}`, "num_of_faults"]);
+  return chips;
 }
+function renderBrief() {
+  const el = $("model_notes");
+  const key = algorithmKey();
+  const a = algorithms.find((x) => x.key === key);
+  if (!a) { el.hidden = true; return; }
+  if (el.hidden) { el.hidden = false; requestAnimationFrame(updateInsets); } // its head now takes room above the view
+  const locks = LOCKS[key] ?? {};
+  const notes = brief.notes.map((text) => {
+    const [re, kind, tag] = NOTE_KINDS.find(([r]) => r.test(text)) ?? [null, "info", ""];
+    return { kind, tag, text: re ? text.replace(re, "") : text };
+  });
+  const warns = notes.filter((x) => x.kind !== "info").length;
+  el.classList.toggle("folded", !brief.open);
+  el.innerHTML = `<button class="brief-head" type="button" aria-expanded="${brief.open}">`
+    + `<span class="brief-name">${esc(MENU_NAMES[key] ?? a.name)}</span>`
+    + (notes.length ? `<span class="brief-count ${warns ? "warn" : ""}">${icon(warns ? "warn" : "info", 13)}${notes.length}</span>` : "")
+    + `<span class="chev" data-icon="chevron" data-size="14"></span></button>`
+    + `<div class="brief-body"${brief.open ? "" : " hidden"}>`
+    + `<p class="brief-rule">${esc(RULES[key] ?? "")}</p>`
+    + `<div class="brief-chips">${briefChips(settings.values, key).map(([text, k]) =>
+      `<span class="chip-tag${locks[k] ? " locked" : ""}"${locks[k] ? ` title="Fixed for this algorithm: ${esc(locks[k].reason)}"` : ""}>${locks[k] ? icon("lock", 11) : ""}${esc(text)}</span>`).join("")}</div>`
+    + (notes.length ? `<ul class="brief-notes">${notes.map((x) =>
+      `<li class="${x.kind}">${icon(x.kind === "info" ? "info" : "warn", 13)}<span>${x.tag ? `<b>${x.tag}.</b> ` : ""}${esc(x.text)}</span></li>`).join("")}</ul>` : "")
+    + `</div>`;
+  renderIcons(el);
+  el.querySelector(".brief-head").addEventListener("click", () => { brief.open = !brief.open; renderBrief(); });
+}
+/** Notes from the core for the current run (empty while a new run starts). */
+function showNotes(notes) { brief.notes = notes; renderBrief(); }
 
 /* -------------------------------------------------------------- scenarios */
 // A scenario is the algorithm plus every setting: saved as a file, or carried in a link (#scenario=…).
@@ -126,16 +172,6 @@ window.lcm = { renderer, client, settings, parseCoordinates, adversary, editor, 
   get state() { return state; } };
 
 /* -------------------------------------------------------- algorithm menu */
-// The menu in four groups. "Advanced gathering" is one entry: its variant is chosen in the sidebar.
-// "Gathering on a ring" lives on its own page (nodes, not points).
-const MENU = [
-  ["Original simulator", ["Gathering", "SEC", "CircleFormation", "GoToCenter", "Spreading", "TwoTask"]],
-  ["Sequential gathering", ["SqGathering"]],
-  ["Advanced gathering", ["advanced"]],
-  ["Other tasks", ["MutualVisibility", "ring"]],
-];
-const MENU_NAMES = { advanced: "Advanced gathering…", ring: "Gathering on a ring ↗", SqGathering: "SqGathering (Algorithm 8)" };
-const ADVANCED = ADVANCED_VARIANTS.map(([key]) => key);
 /** The registry key of the algorithm that runs: the menu's choice, or the advanced variant. */
 function algorithmKey() {
   const v = $("algorithm").value;
@@ -146,31 +182,21 @@ function selectAlgorithm(key) {
   if (ADVANCED.includes(key)) { $("algorithm").value = "advanced"; settings.set("variant", key, false); }
   else $("algorithm").value = key;
 }
-function buildMenu(list) {
-  const known = new Set(list.map((a) => a.key));
-  const name = (key) => MENU_NAMES[key] ?? list.find((a) => a.key === key)?.name ?? key;
-  const listed = new Set(MENU.flatMap(([, keys]) => keys));
-  const groups = MENU.map(([label, keys]) => [label, keys.filter((k) => k === "advanced" || k === "ring" || known.has(k))]);
-  // Anything the core knows that the menu does not place yet still shows up, at the end.
-  const rest = list.map((a) => a.key).filter((k) => !listed.has(k) && !ADVANCED.includes(k));
-  if (rest.length) groups.push(["More", rest]);
-  $("algorithm").innerHTML = groups.filter(([, keys]) => keys.length)
-    .map(([label, keys]) => `<optgroup label="${label}">${keys.map((k) => `<option value="${k}">${name(k)}</option>`).join("")}</optgroup>`).join("");
-}
+function buildMenu(list) { $("algorithm").innerHTML = menuHtml(list); }
 
 // What each algorithm fixes, shown locked in the sidebar with the reason (instead of refusing the run).
 const LOCKS = {
   CompassGathering: {
-    num_of_robots: { value: 2, reason: "Izumi et al.'s algorithm is for two robots" },
+    num_of_robots: { value: 2, reason: "this algorithm is for exactly two robots" },
     frames: { value: "compass", reason: "each robot reads its own compass" },
-    num_of_faults: { value: 0, reason: "the paper's robots are not faulty" },
+    num_of_faults: { value: 0, reason: "it assumes robots that never fail" },
   },
   RandomizedGathering: {
-    num_of_robots: { value: 2, reason: "the paper's algorithm is for two robots" },
-    num_of_faults: { value: 0, reason: "the paper's robots are not faulty" },
+    num_of_robots: { value: 2, reason: "this algorithm is for exactly two robots" },
+    num_of_faults: { value: 0, reason: "it assumes robots that never fail" },
   },
   CrashGathering: {
-    scheduler: { value: "ssync", reason: "Gather_k is proved for SSYNC" },
+    scheduler: { value: "ssync", reason: "it works in rounds, some robots at a time" },
     multiplicity: { value: "weak", reason: "it needs weak multiplicity detection" },
     fault_type: { value: "crash", reason: "it tolerates crash faults only" },
   },
@@ -180,7 +206,7 @@ const LOCKS = {
     scheduler: { value: "sequential", reason: "the no-lights algorithm is for a sequential scheduler" },
   },
   SqGathering: {
-    num_of_faults: { value: 0, reason: "Theorem 5 assumes no faulty robots" },
+    num_of_faults: { value: 0, reason: "it assumes robots that never fail" },
   },
 };
 LOCKS.RandomizedGatheringUniform = LOCKS.RandomizedGathering;
@@ -190,13 +216,14 @@ function applyAlgorithm() {
   const key = algorithmKey();
   settings.setContext({ family: $("algorithm").value === "advanced" ? "advanced" : "plain" });
   settings.freeze(LOCKS[key] ?? {});
+  // The sidebar only says what is locked; what the algorithm does is in the brief under the toolbar.
   const card = $("algo_card");
   if (card) {
-    const a = algorithms.find((x) => x.key === key);
-    const locks = Object.keys(LOCKS[key] ?? {}).length;
-    card.innerHTML = `<div class="algo-name">${a?.name ?? key}</div><div class="algo-rule">${RULES[key] ?? ""}</div>`
-      + (locks ? `<div class="algo-locks">${locks} setting${locks === 1 ? "" : "s"} locked for this variant (marked below).</div>` : "");
+    const locks = Object.values(LOCKS[key] ?? {});
+    card.hidden = !locks.length;
+    card.innerHTML = locks.length ? `${icon("lock", 12)}<span>${locks.length} setting${locks.length === 1 ? " is" : "s are"} fixed for this variant, marked with a lock below.</span>` : "";
   }
+  renderBrief();
 }
 
 /* ------------------------------------------------------------ run control */
@@ -227,6 +254,7 @@ function newRun({ quiet = false, keepView = false } = {}) {
   adversary.reset();
   showNotes([]);
   renderer.options.visibility = c.visibility_radius;
+  renderer.options.compassError = c.frames === "compass" ? c.compass_error : 0;
   // "Who sees whom" means something only when robots see just a part of the swarm.
   const limitedSight = c.visibility_radius != null;
   $("links").hidden = !limitedSight;
@@ -301,6 +329,7 @@ function onSettingChange(key) {
   if (state === "loading") return;
   if (key === "variant") { onAlgorithmChange(); return; }
   updatePlaybackOptions();
+  renderBrief();
   if (state === "ready") {
     clearTimeout(restartTimer);
     restartTimer = setTimeout(() => newRun({ quiet: true }), 120); // debounce slider drags and typing
@@ -311,8 +340,11 @@ function onSettingChange(key) {
 }
 
 function setState(next) {
+  const was = state;
   state = next;
   const running = next === "running";
+  // Playing: the brief folds to one line so the robots have the room; a click opens it again.
+  if (running && was !== "running" && brief.open) { brief.open = false; renderBrief(); }
   const canRun = next === "ready" || next === "paused" || running;
   $("play").disabled = !canRun;
   $("play").innerHTML = `${icon(running ? "pause" : "play")}<span class="label">${running ? "Pause" : "Play"}</span>`;
@@ -353,15 +385,15 @@ const EXAMPLES = {
   SqGathering: [
     { label: "Rendezvous: two robots", note: "κ = 0: the active robot walks to the other one",
       set: { ...SQ, custom: "-80, 0\n80, 0", scheduler: "sequential", multiplicity: "weak", rigid_movement: true } },
-    { label: "Lemma 8: SSYNC never gathers", note: "The adversary moves a whole multiplicity at once: two multiplicities, ever closer, never one",
+    { label: "Rounds: never gathers", note: "A whole stack moves at once each time: two stacks get ever closer but never merge",
       set: { ...SQ, custom: TWO_PAIRS, scheduler: "ssync", multiplicity: "weak", rigid_movement: true, schedule_text: "0 1 | 2 3", schedule_repeat: "repeat", max_rounds: 16 } },
-    { label: "The same start, sequential", note: "One robot at a time: it gathers (Theorem 5)",
+    { label: "The same start, sequential", note: "One robot at a time: it gathers",
       set: { ...SQ, custom: TWO_PAIRS, scheduler: "sequential", multiplicity: "weak", rigid_movement: true } },
-    { label: "Theorem 4: no multiplicity detection", note: "Every robot sees two points and goes to the other: the schedule 0, 2, 1 keeps them apart",
+    { label: "Can't see stacks: never gathers", note: "Every robot sees two points and goes to the other: the order 0, 2, 1 keeps them apart",
       set: { ...SQ, custom: PAIR_AND_ONE, scheduler: "sequential", multiplicity: "none", rigid_movement: true, schedule_text: "0, 2, 1", schedule_repeat: "repeat", max_turns: 60 } },
-    { label: "Theorem 4 with weak detection", note: "The same schedule, with weak detection: the single robot joins the pair",
+    { label: "Same order, robots see stacks", note: "Now the single robot knows the pair is a stack and joins it",
       set: { ...SQ, custom: PAIR_AND_ONE, scheduler: "sequential", multiplicity: "weak", rigid_movement: true, schedule_text: "0, 2, 1", schedule_repeat: "repeat", max_turns: 60 } },
-    { label: "Limited visibility (open problem)", note: "Section 8.2: 30 robots, sight radius 120",
+    { label: "Limited visibility (open problem)", note: "Experimental: 30 robots that see only 120 units around them",
       set: { open_world: true, pattern: "cloud", num_of_robots: 30, spread: 90, scheduler: "sequential", turn_gap: "none", multiplicity: "weak", unlimited_visibility: false, visibility_radius: 120, rigid_movement: true, schedule_text: "" } },
   ],
   Gathering: [
@@ -373,17 +405,17 @@ const EXAMPLES = {
       set: { open_world: true, pattern: "line", num_of_robots: 8, size: 300, scheduler: "sequential", turn_gap: "none", obstructed_visibility: true, robot_radius: 4, rigid_movement: true } },
   ],
   CompassGathering: [
-    { label: "Static compass, φ = 60°", note: "A_SS: guaranteed for φ < 90°; red needles show each robot's north",
+    { label: "Static compass, φ = 60°", note: "Always gathers while the error stays below 90°. Red needles show where each robot thinks north is",
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 60, compass_static: true, scheduler: "ssync", turn_gap: "none", robot_speeds: 20, rigid_movement: true, num_of_faults: 0, schedule_text: "" } },
-    { label: "Dynamic compass, SSYNC, φ = 40°", note: "A_SD: guaranteed for φ < 45°",
+    { label: "Dynamic compass, SSYNC, φ = 40°", note: "Robots act in rounds: always gathers while the error stays below 45°",
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 40, compass_static: false, scheduler: "ssync", turn_gap: "none", robot_speeds: 20, rigid_movement: true, num_of_faults: 0, schedule_text: "" } },
-    { label: "Dynamic compass, async, φ = 25°", note: "A_AD: guaranteed for φ < 30°. They meet and stay together, but under async never terminate (Remark 2): pause once they meet",
+    { label: "Dynamic compass, async, φ = 25°", note: "Robots act on their own: gathers while the error stays below 30°. Once together they stay put but never stop, so pause when they meet",
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, multiplicity: "weak", pattern: "custom", custom: "-120, 40\n110, -60", frames: "compass", compass_error: 25, compass_static: false, scheduler: "async", robot_speeds: 20, rigid_movement: true, num_of_faults: 0 } },
   ],
   RandomizedGathering: [
     { label: "Mirror images, FSYNC", note: "Both robots see the same picture; only their coins tell them apart",
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, frames: "global", pattern: "custom", custom: "-150, 0\n150, 0", scheduler: "fsync", turn_gap: "none", robot_speeds: 40, rigid_movement: true, num_of_faults: 0 } },
-    { label: "Async", note: "λ ∈ {0, ½, 1} at every Look (Theorem 12)",
+    { label: "Async", note: "Each look tosses a coin: stay, go halfway or go all the way",
       set: { open_world: true, obstructed_visibility: false, unlimited_visibility: true, frames: "global", pattern: "custom", custom: "-150, 0\n150, 0", scheduler: "async", robot_speeds: 40, rigid_movement: true, num_of_faults: 0 } },
   ],
   get RandomizedGatheringUniform() { return this.RandomizedGathering; },
@@ -396,7 +428,7 @@ const EXAMPLES = {
   CrashGathering: [
     { label: "Ten robots, three crashed", note: "The others gather on one point; crashed robots stay where they are",
       set: { open_world: true, frames: "global", obstructed_visibility: false, unlimited_visibility: true, pattern: "cloud", num_of_robots: 10, spread: 120, num_of_faults: 3, fault_type: "crash", scheduler: "ssync", turn_gap: "none", multiplicity: "weak", robot_speeds: 20, rigid_movement: true, schedule_text: "" } },
-    { label: "Robots in line behind each other", note: "Blocked robots curve off their ray (an approximation of the paper's arcs)",
+    { label: "Robots in line behind each other", note: "A robot with another in its way curves around it",
       set: { open_world: true, frames: "global", obstructed_visibility: false, unlimited_visibility: true, pattern: "custom", custom: "10, 0\n20, 0\n30, 0\n40, 0\n-40, 0\n0, 35", num_of_faults: 0, scheduler: "ssync", turn_gap: "none", multiplicity: "weak", robot_speeds: 20, rigid_movement: true, schedule_text: "" } },
   ],
   Spreading: [
@@ -495,6 +527,9 @@ $("examples_menu").addEventListener("keydown", (e) => {
 client.on("ready", (list) => {
   algorithms = list;
   buildMenu(list);
+  // ?algorithm=KEY (from the ring page's menu, or a link) opens the page on that algorithm.
+  const asked = new URLSearchParams(location.search).get("algorithm");
+  if (asked && (asked === "advanced" || list.some((a) => a.key === asked))) { selectAlgorithm(asked); lastMenu = $("algorithm").value; }
   applyAlgorithm();
   updateExamples();
   $("loading_text").textContent = "Building the swarm…";
@@ -532,18 +567,18 @@ const fmtSize = (v) => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v >= 1
 
 /* Playing a turn at a time: say, in plain words, whose turn it is and what the algorithm does. */
 const RULES = {
-  Gathering: "It goes to the average position of all the robots it sees (the centre of gravity).",
-  SEC: "It goes to the nearest point of the smallest circle around the robots it sees.",
-  GoToCenter: "It heads for the centre of the smallest circle around the robots it sees, but never so far that it could lose sight of a neighbour.",
-  SqGathering: "Algorithm 8: with one multiplicity it joins it (or stays on it); with several it leaves its own for the midpoint towards the closest point; with none it goes to the closest robot.",
-  Spreading: "It goes to the centre of the area closer to it than to any other robot (its Voronoi cell).",
-  TwoTask: "Red robots run SEC, blue robots run Gathering.",
-  CircleFormation: "Off the circle (centred on the swarm, at its mean radius), it steps onto it; on it, it slides to halfway between its two neighbours, so the robots end up evenly spaced.",
-  CompassGathering: "Izumi et al.: depending on where the other robot is by its own (unreliable) compass, it goes to it, steps west, turns around it, or waits.",
-  RandomizedGathering: "It tosses a coin: stay, go halfway, or go all the way to the other robot.",
-  RandomizedGatheringUniform: "It picks one of three moves at random: all the way to the other robot, halfway, or a uniformly random fraction of the way (Theorem 3).",
-  MutualVisibility: "It makes a small move that leaves every line through itself and another robot, and crosses no line through two robots it sees.",
-  CrashGathering: "It heads for the multiplicity point, or the centre of the smallest enclosing circle; if a robot is in its way it curves around.",
+  Gathering: "Each robot walks to the average position of the robots it sees, so the swarm closes in on its centre.",
+  SEC: "Each robot walks to the nearest point of the smallest circle around the robots it sees.",
+  GoToCenter: "Each robot heads for the centre of the smallest circle around the robots it sees, but never so far that it could lose sight of a neighbour.",
+  SqGathering: "One robot moves at a time. With one stack of robots, everyone joins it; with several, a robot on a stack steps halfway to its nearest neighbour while the others wait; with none, a robot walks to its nearest neighbour.",
+  Spreading: "Each robot walks to the centre of the area closer to it than to any other robot, so the swarm spreads out evenly.",
+  TwoTask: "Half the robots (red) close in on the smallest circle around the swarm, the other half (blue) on its centre.",
+  CircleFormation: "A robot off the circle around the swarm steps onto it; on it, a robot slides to halfway between its two neighbours, so the robots end up evenly spaced.",
+  CompassGathering: "Two robots whose compasses may point a little off north. Depending on where the other robot lies by its own compass, a robot walks onto it, steps west, swings around it, or waits.",
+  RandomizedGathering: "Two robots. At each look a robot tosses a coin: stay, go halfway, or go all the way to the other robot.",
+  RandomizedGatheringUniform: "Two robots. At each look a robot picks at random: go all the way to the other robot, halfway, or a random fraction of the way.",
+  MutualVisibility: "Robots in line hide each other. Each robot makes small sideways moves, never landing in line with two others, until every robot sees every other.",
+  CrashGathering: "Robots gather even if some stop working for good. Each heads for the stack (before there is one, the centre of the smallest circle around everyone), curving around robots in its way.",
 };
 const fmtNumber = (v) => (v === 0 ? "0" : v >= 1e-3 ? String(+v.toPrecision(3)) : v.toExponential(2));
 let endNote = null;   // "ended", "stalled" or null: which note is up
@@ -601,6 +636,7 @@ client.on("frame", (f) => {
   updateCaption(f);
   if (fitPending) { fitPending = false; fitToStart(f); }
   renderer.setFrame(f);
+  renderer.keepInView(f);
   if (firstFrame) { firstFrame = false; $("loading").hidden = true; resolveReady(); }
   if (f.lastEvent) showLastEvent(f.lastEvent);
   window.lcm.frames = (window.lcm.frames ?? 0) + 1;
@@ -770,6 +806,7 @@ $("algorithm").addEventListener("change", () => {
   onAlgorithmChange();
 });
 function onAlgorithmChange() {
+  brief.open = true; // a new algorithm: say what it does
   applyAlgorithm();
   updateExamples();
   // An algorithm that only works under the sequential scheduler (SqGathering)
@@ -814,7 +851,10 @@ function updateInsets() {
   root.setProperty("--top-h", `${Math.round(toolbar ? toolbar.bottom : 0)}px`);
   const hud = visible("hud");
   root.setProperty("--hud-bottom", `${Math.round(hud ? hud.bottom : 0)}px`);
-  const settingsRect = visible("settings"), tools = visible("tools"), legend = visible("legend");
+  // Where the view tools start: the brief, when it sits in the right-hand column, stops above them.
+  const toolsBox = visible("tools");
+  root.setProperty("--tools-top", `${Math.round(toolsBox ? toolsBox.top : innerHeight)}px`);
+  const settingsRect = visible("settings"), tools = visible("tools"), legend = visible("legend"), briefRect = visible("model_notes");
   // The overview map sits just left of the view tools, in the bottom right corner.
   if (tools && tools.height > tools.width) $("overview").style.right = `${Math.round(innerWidth - tools.left + 8)}px`;
   if (innerWidth <= 760) {
@@ -826,7 +866,8 @@ function updateInsets() {
   renderer.setInsets({
     left: settingsRect ? settingsRect.right : 0,
     right: Math.max(hud ? innerWidth - hud.left : 0, tools && tools.height > tools.width ? innerWidth - tools.left : 0),
-    top: toolbar ? toolbar.bottom : 0,
+    // The brief's one-line head stays clear of the view (opened, it may cover the top of the view for a while).
+    top: Math.max(toolbar ? toolbar.bottom : 0, briefRect ? briefRect.top + 42 : 0),
     bottom: tools && tools.width >= tools.height ? innerHeight - tools.top : 56,
   });
 }
@@ -1029,6 +1070,8 @@ canvas.addEventListener("wheel", (e) => {
   renderer.zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top);
 }, { passive: false });
 new ResizeObserver(() => { renderer.resize(); updateInsets(); }).observe($("stage"));
+// The stats card grows as a run fills it in: whatever sits under it moves down with it.
+new ResizeObserver(() => updateInsets()).observe($("hud"));
 updateInsets();
 renderer.resetView();
 
