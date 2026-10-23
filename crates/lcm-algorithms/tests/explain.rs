@@ -31,12 +31,12 @@ fn sq_gathering_names_kappa_b_and_the_rule() {
         &[
             "2 occupied points",
             "κ = 1",
-            "single (b = 0)",
-            "lines 4-7",
+            "alone (b = 0)",
+            "move to the multiplicity point",
             "moves 10 units",
         ],
     );
-    says(s.explain(0), &["a multiplicity (b = 1)", "do not move"]);
+    says(s.explain(0), &["on a stack (b = 1)", "do not move"]);
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn compass_gathering_names_the_bearing_and_what_it_does() {
         &[
             "10 units away",
             "0° counter-clockwise",
-            "A_SS",
+            "fixed compass",
             "it waits",
         ],
     );

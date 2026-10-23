@@ -309,18 +309,18 @@ impl Algorithm for SqGathering {
         let d = decide(&obs);
         let points = obs.points.len();
         let mut text = format!(
-            "It sees {points} occupied point{}, {} of them multiplicities (κ = {}); its own point is {} (b = {}).",
+            "It sees {points} occupied point{}, {} of them stack{} (κ = {}); it stands {} (b = {}).",
             if points == 1 { "" } else { "s" },
             d.kappa,
+            if d.kappa == 1 { "" } else { "s" },
             d.kappa,
-            if d.on_multiplicity { "a multiplicity" } else { "single" },
+            if d.on_multiplicity { "on a stack" } else { "alone" },
             u8::from(d.on_multiplicity),
         );
-        text.push_str(&format!(
-            " Rule (lines {}): {}.",
-            d.rule.lines(),
-            d.rule.description()
-        ));
+        // The rule's description without its "κ = 1, b = 0:" condition, already said above.
+        let rule = d.rule.description();
+        let rule = rule.split_once(": ").map_or(rule, |(_, what)| what);
+        text.push_str(&format!(" So it does this: {rule}."));
         let to = dist(obs.points[obs.me].at, d.destination(&obs));
         if to > 0.0 {
             text.push_str(&format!(" It moves {} units.", crate::num(to)));
@@ -363,36 +363,36 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = Vec::new();
     match config.scheduler {
         SchedulerKind::Ssync => notes.push(
-            "Outside the model: under SSYNC gathering is unsolvable even with multiplicity detection (Lemma 8). An adversary activating a whole multiplicity at once keeps two multiplicities apart forever."
+            "Outside the model: with robots acting in rounds no rule can always gather, even when robots see stacks: if every robot of a stack moves at once each time, two stacks keep approaching without ever merging."
                 .to_owned(),
         ),
         SchedulerKind::Fsync => notes.push(
-            "Outside the model: Algorithm 8 is proved for sequential schedulers only. Under FSYNC gathering is solvable by other rules (go to the centre of the smallest enclosing circle); whether this rule gathers depends on the start."
+            "Outside the model: this rule is made for one robot at a time. With every robot moving at once other rules gather (go to the centre of the smallest enclosing circle); whether this one does depends on the start."
                 .to_owned(),
         ),
         _ => {}
     }
     if config.multiplicity == MultiplicityModel::Local {
         notes.push(
-            "Outside the model: with only local detection a robot cannot count the multiplicities it sees. A robot on a shared point always sees κ = 1 and stays; a robot alone sees κ = 0 and goes to its closest point. So two multiplicities never merge."
+            "Outside the model: with only local detection a robot cannot tell which other points are stacks. A robot on a stack always stays; a robot alone walks to its nearest neighbour. So two stacks never merge."
                 .to_owned(),
         );
     }
     if config.multiplicity == MultiplicityModel::None {
         notes.push(
-            "Outside the model: without multiplicity detection gathering is unsolvable under a sequential scheduler (Theorem 4). Every robot takes the κ = 0 branch, and on two points the adversary moves robots back and forth for ever."
+            "Outside the model: robots that cannot see stacks can never be sure to gather, even one at a time. Every robot walks to its nearest neighbour, and on two points the scheduler can move robots back and forth for ever."
                 .to_owned(),
         );
     }
     if config.visibility_radius.is_some() {
         notes.push(
-            "Experimental: the paper assumes unlimited visibility; limited visibility is an open problem (Section 8.2). Each robot applies the rule to the robots it can see."
+            "Experimental: the rule is made for robots that see everyone; whether it gathers with limited sight is an open problem. Each robot applies the rule to the robots it can see."
                 .to_owned(),
         );
     }
     if config.obstructed_visibility {
         notes.push(
-            "Experimental: the paper assumes robots never hide one another; obstructed visibility is an open problem (Section 8.2)."
+            "Experimental: the rule is made for robots that never hide one another; whether it gathers when they do is an open problem."
                 .to_owned(),
         );
     }

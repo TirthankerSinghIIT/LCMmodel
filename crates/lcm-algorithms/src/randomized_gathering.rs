@@ -97,9 +97,9 @@ impl Algorithm for RandomizedGathering {
             );
         }
         let coin = match self.choice {
-            Choice::ZeroHalfOne => "stay, go halfway or go all the way (λ ∈ {0, ½, 1}, Theorem 12)",
+            Choice::ZeroHalfOne => "stay, go halfway or go all the way (λ ∈ {0, ½, 1})",
             Choice::OneHalfUniform => {
-                "go all the way, halfway or a uniformly random fraction of the way (λ ∈ {1, ½, U(0, 1)}, Theorem 3)"
+                "go all the way, halfway or a uniformly random fraction of the way (λ ∈ {1, ½, U(0, 1)})"
             }
         };
         Some(format!(
@@ -119,7 +119,7 @@ fn two_robots(config: &SimConfig, name: &str) -> Result<(), ConfigError> {
         Ok(())
     } else {
         Err(ConfigError::Unsupported(format!(
-            "{name} is for exactly two robots (the paper's extension to more needs co-located robots to merge): set Robots to 2"
+            "{name} is for exactly two robots (more need robots on one spot to merge into one): set Robots to 2"
         )))
     }
 }
@@ -151,10 +151,10 @@ pub fn plan_uniform(config: &SimConfig) -> Result<Plan, ConfigError> {
 pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = Vec::new();
     if !config.rigid_movement {
-        notes.push("Outside the model: the paper's robots move rigidly (they always reach the point they chose).".to_owned());
+        notes.push("Outside the model: the algorithm is made for robots that always reach the point they chose (rigid moves).".to_owned());
     }
     if config.num_of_faults > 0 {
-        notes.push("Outside the model: the paper's robots are not faulty, and need equal speeds (a delayed robot moves slower).".to_owned());
+        notes.push("Outside the model: the algorithm is made for robots that never fail and move at equal speeds (a delayed robot moves slower).".to_owned());
     }
     notes
 }

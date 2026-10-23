@@ -920,7 +920,7 @@ pub fn fill_frame(
 }
 ```
 
-`draw` — [`web/renderer.js:500`](../web/renderer.js#L500)
+`draw` — [`web/renderer.js:586`](../web/renderer.js#L586)
 
 ```js
 draw(ctx = this.ctx, dpr = this.dpr) {
@@ -931,6 +931,7 @@ draw(ctx = this.ctx, dpr = this.dpr) {
   ctx.fillRect(0, 0, this.width, this.height);
 
   if (this.follow && frame) this.stepFollow();
+  else this.stepViewTarget();
   const s = this.scale;
   const ox = this.width / 2 + this.pan.x;
   const oy = this.height / 2 + this.pan.y;
@@ -970,7 +971,8 @@ draw(ctx = this.ctx, dpr = this.dpr) {
   }
   if (!frame) { this.lastDrawMs = performance.now() - t0; return; }
 
-  const { xy, flags, fault, task, light, target, circle } = frame;
+  const { flags, fault, task, light, target, circle } = frame;
+  const xy = this.drawnXY(frame);
   // The frame's numbers are offsets from its origin (see Frame in lcm-core): add the origin
   // here in f64, so a swarm far from (0, 0) and tiny next to that distance stays distinct.
   const fx = ox + ((frame.originX ?? 0) - this.anchor.x) * s, fy = oy - ((frame.originY ?? 0) - this.anchor.y) * s;
@@ -1272,7 +1274,30 @@ draw(ctx = this.ctx, dpr = this.dpr) {
 
   // Unreliable compasses: each robot's own north, a short needle (the true north is straight up).
   const compass = frame.compass;
-  if (compass && compass.length === n && n <= 300) {
+  if (compass && compass.length === n && n <= 12) {
+    // A few robots: a small compass around each. The shaded wedge is where its north may point (true north
+    // ± the error), the grey tick is true north, the red needle the north this robot reads now.
+    const R = Math.max(r, 3) + 22, phi = ((this.options.compassError ?? 0) * Math.PI) / 180;
+    ctx.save();
+    ctx.font = "600 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (let i = 0; i < n; i++) {
+      const x = X(xy[2 * i]), y = Y(xy[2 * i + 1]), a = compass[i];
+      ctx.strokeStyle = "rgba(148,163,184,.35)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(x, y, R, 0, 2 * Math.PI); ctx.stroke();
+      if (phi > 0) {
+        ctx.fillStyle = "rgba(239,68,68,.13)";
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, R, -Math.PI / 2 - Math.min(phi, Math.PI), -Math.PI / 2 + Math.min(phi, Math.PI)); ctx.closePath(); ctx.fill();
+      }
+      ctx.strokeStyle = "rgba(148,163,184,.8)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, y - R + 5); ctx.lineTo(x, y - R - 3); ctx.stroke();
+      const tx = x - R * Math.sin(a), ty = y - R * Math.cos(a);
+      ctx.strokeStyle = "rgba(239,68,68,.95)"; ctx.fillStyle = "rgba(239,68,68,.95)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - (Math.max(r, 2) + 2) * Math.sin(a), y - (Math.max(r, 2) + 2) * Math.cos(a)); ctx.lineTo(tx, ty); ctx.stroke();
+      ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillText("N", x - (R + 9) * Math.sin(a), y - (R + 9) * Math.cos(a));
+    }
+    ctx.restore();
+  } else if (compass && compass.length === n && n <= 300) {
     ctx.save();
     ctx.strokeStyle = "rgba(220,60,60,.85)"; ctx.lineWidth = 1.5;
     ctx.beginPath();

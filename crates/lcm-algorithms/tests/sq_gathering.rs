@@ -449,7 +449,7 @@ fn settings_outside_the_model_are_refused() {
         ..base.clone()
     };
     assert!(lcm_algorithms::simulation(&ssync).is_ok());
-    assert!(sq_gathering::notes(&ssync)[0].contains("Lemma 8"));
+    assert!(sq_gathering::notes(&ssync)[0].contains("without ever merging"));
     assert!(sq_gathering::notes(&base).is_empty());
     let faulty = SimConfig {
         num_of_faults: 1,

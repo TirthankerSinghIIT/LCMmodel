@@ -129,10 +129,10 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
         notes.push("Turn on Settings → Visibility → Robots block the view: with transparent robots everyone sees everyone from the start.".to_owned());
     }
     if config.scheduler != SchedulerKind::Sequential {
-        notes.push("Outside the model: the no-lights algorithm is proved for a sequential scheduler. With robots moving together they can land in line with each other.".to_owned());
+        notes.push("Outside the model: the algorithm is made for one robot at a time. With robots moving together they can land in line with each other.".to_owned());
     }
     if config.visibility_radius.is_some() {
-        notes.push("Outside the model: the paper's robots see arbitrarily far (only other robots block the view).".to_owned());
+        notes.push("Outside the model: the algorithm is made for robots that see arbitrarily far (only other robots block the view).".to_owned());
     }
     notes
 }

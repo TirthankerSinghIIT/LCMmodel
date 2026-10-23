@@ -133,9 +133,9 @@ impl Algorithm for CompassGathering {
         let p = Point::new(q.x - me.x, q.y - me.y);
         let gap = libm::hypot(p.x, p.y);
         let name = match self.rules {
-            Rules::StaticCompass => "A_SS",
-            Rules::DynamicSynchronous => "A_SD",
-            Rules::DynamicAsynchronous => "A_AD",
+            Rules::StaticCompass => "fixed compass",
+            Rules::DynamicSynchronous => "changing compass, robots in rounds",
+            Rules::DynamicAsynchronous => "changing compass, robots on their own",
         };
         if gap <= look.model.eps {
             return Some(format!(
@@ -143,7 +143,7 @@ impl Algorithm for CompassGathering {
                 if self.terminate {
                     "It terminates."
                 } else {
-                    "Under async it stays without terminating (Remark 2)."
+                    "Acting on its own, it stays without stopping."
                 }
             ));
         }
@@ -163,7 +163,7 @@ impl Algorithm for CompassGathering {
             )
         };
         Some(format!(
-            "By its own compass the other robot is {} units away, {}° counter-clockwise from its east. Under rule set {name} (φ = {}°), at that bearing {action}.",
+            "By its own compass the other robot is {} units away, {}° counter-clockwise from its east. With the rules for a {name} (error up to {}°), at that bearing {action}.",
             crate::num(gap),
             crate::num(bearing),
             crate::num(self.phi.to_degrees()),
@@ -222,7 +222,7 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
     let phi = config.compass_error;
     if config.frames != lcm_core::Frames::Compass {
         notes.push(
-            "The robots' compasses are exact here (Frames is not Compass): φ = 0.".to_owned(),
+            "The robots' compasses are exact here (Coordinate frames is not set to Compass), so the error is 0°.".to_owned(),
         );
         return notes;
     }
@@ -231,28 +231,36 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
         SchedulerKind::Async | SchedulerKind::KAsync
     );
     let (name, bound, tight) = if config.compass_static {
-        ("A_SS (static compass)", 90.0, true)
+        ("The rules for a fixed compass", 90.0, true)
     } else if overlapping {
-        ("A_AD (dynamic compass, asynchronous)", 30.0, false)
+        (
+            "The rules for a changing compass, robots acting on their own,",
+            30.0,
+            false,
+        )
     } else {
-        ("A_SD (dynamic compass, synchronous)", 45.0, true)
+        (
+            "The rules for a changing compass, robots acting in rounds,",
+            45.0,
+            true,
+        )
     };
     if phi >= bound {
         notes.push(format!(
-            "Outside the guarantee: {name} is proved for φ < {bound}°{}; this run has φ = {phi}°.",
+            "Outside the model: {name} are sure to gather only while the compass error stays below {bound}°{}; this run allows {phi}°.",
             if tight {
-                " and no algorithm works above it"
+                ", and no rules can do better"
             } else {
-                " (whether that bound is tight is open)"
+                " (whether any rules can do better is open)"
             }
         ));
     } else {
         notes.push(format!(
-            "{name}: guaranteed to gather for φ < {bound}°; this run has φ = {phi}°."
+            "{name} are sure to gather while the compass error stays below {bound}°; this run allows {phi}°."
         ));
     }
     if overlapping {
-        notes.push("Under async the robots do not terminate once together (Remark 2 of the paper): the run goes on with both staying put.".to_owned());
+        notes.push("Acting on their own, the robots never stop once together: they stay put, but stopping could be wrong if the other were still moving, so the run goes on.".to_owned());
     }
     notes
 }

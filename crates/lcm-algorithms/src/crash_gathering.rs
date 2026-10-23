@@ -258,7 +258,7 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
         SchedulerKind::Async | SchedulerKind::KAsync
     ) {
         return Err(ConfigError::Unsupported(
-            "Crash-tolerant gathering (Gather_k) is for SSYNC: pick Sequential, SSYNC or FSYNC as the scheduler".to_owned(),
+            "Gathering despite crashes works in rounds: pick Sequential, SSYNC or FSYNC as the scheduler".to_owned(),
         ));
     }
     if matches!(
@@ -274,15 +274,17 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
 
 #[must_use]
 pub fn notes(config: &SimConfig) -> Vec<String> {
-    let mut notes = vec!["Approximation: a robot whose straight path is blocked moves halfway along the paper's arc in one straight step, then straight on.".to_owned()];
+    let mut notes = vec!["Simplification: a robot whose straight path is blocked curves around the robot in its way in one straight sideways step, then goes straight on.".to_owned()];
     if config.num_of_faults > 0 && config.fault_type != lcm_core::FaultSelection::Crash {
-        notes.push("Outside the model: the paper tolerates crash faults only.".to_owned());
+        notes.push("Outside the model: the algorithm tolerates robots that stop for good (crash faults) only.".to_owned());
     }
     if config.multiplicities > 1 {
-        notes.push("Outside the model: a start with two or more multiplicity points is not legal; gathering from it is impossible in SSYNC (Theorem 1).".to_owned());
+        notes.push("Outside the model: a start with two or more stacks cannot be gathered by any algorithm when robots act in rounds.".to_owned());
     }
     if config.visibility_radius.is_some() {
-        notes.push("Outside the model: the paper's robots see everyone.".to_owned());
+        notes.push(
+            "Outside the model: the algorithm is made for robots that see everyone.".to_owned(),
+        );
     }
     notes
 }
