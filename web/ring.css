@@ -11,7 +11,7 @@
 #ring .robot.next { fill: var(--sg-active); }
 #ring .count { font-weight: 600; font-family: system-ui, sans-serif; fill: var(--surface-solid); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 #ring .label { font-family: system-ui, sans-serif; fill: var(--text-3); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
-#ring .ids { font-weight: 600; font-family: system-ui, sans-serif; fill: var(--text-2); text-anchor: middle; pointer-events: none; }
+#ring .ids { font-weight: 600; font-family: system-ui, sans-serif; fill: var(--text-2); dominant-baseline: central; pointer-events: none; }
 #ring .arrow { stroke: var(--sg-active); stroke-width: 3; fill: none; marker-end: url(#tip); }
 #ring .ring-gathered { fill: var(--sg-ok); }
 .ring-status { text-align: center; color: var(--text-2); margin-top: 4px; min-height: 2.6em; line-height: 1.35; }
@@ -59,3 +59,55 @@
 #ring .robot, #ring .count, #ring .ids { transition: none; }
 #ring .robot.mover { fill: var(--sg-active); stroke: var(--surface-solid); stroke-width: 2; opacity: .9; }
 #ring .robot.arriving { opacity: 0; }
+
+/* The card about the next move */
+.ring-next { padding: 10px 12px; margin-bottom: 12px; border-radius: 10px; background: var(--surface-2); border-left: 3px solid var(--sg-active);
+  display: grid; gap: 6px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); animation: ring-fade .3s ease both; }
+.ring-next p { margin: 0; }
+.ring-next strong { color: var(--text); }
+.ring-next .nc-head { display: flex; align-items: center; gap: 7px; font-weight: 650; font-size: 13.5px; color: var(--text); }
+.ring-next .nc-head.done { color: var(--sg-ok); }
+.ring-next .nc-head.warn { color: var(--danger); }
+.ring-next .nc-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sg-active); box-shadow: 0 0 0 0 var(--sg-active); animation: nc-pulse 1.6s ease-out infinite; }
+.ring-next:has(.nc-head.done) { border-left-color: var(--sg-ok); }
+.ring-next:has(.nc-head.warn) { border-left-color: var(--danger); }
+.ring-next .muted { color: var(--text-3); font-weight: 400; }
+
+/* Rounds used, out of the most the rules can need */
+.ring-progress { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: -2px 0 10px; }
+.ring-progress div { height: 100%; width: 0; background: var(--sg-active); border-radius: 3px; transition: width .35s ease, background .35s; }
+.ring-progress div.done { background: var(--sg-ok); }
+
+/* How the robots decide */
+.ring-how { margin: 4px 0 12px; border-radius: 8px; background: var(--surface-2); }
+.ring-how summary { cursor: pointer; padding: 8px 10px; font-weight: 600; font-size: 12.5px; list-style: none; display: flex; align-items: center; gap: 6px; }
+.ring-how summary::-webkit-details-marker { display: none; }
+.ring-how summary .chev { transition: transform .15s; color: var(--text-3); }
+.ring-how[open] summary .chev { transform: rotate(90deg); }
+.ring-how-body { padding: 0 12px 10px; font-size: 12.5px; line-height: 1.55; color: var(--text-2); display: grid; gap: 8px; animation: ring-fade .25s ease both; }
+.ring-how-body p { margin: 0; }
+
+/* Motion: a halo breathing around the robot whose turn it is, the step arrow drawing itself, the newest turn
+   flashing in the table, a ring spreading from the node the robots gathered on. Reduced motion stills it all. */
+#ring .halo { fill: none; stroke: var(--sg-active); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: halo 1.6s ease-out infinite; }
+#ring .arrow { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-arrow .45s .05s ease-out forwards; }
+#ring .gather-burst { fill: none; stroke: var(--sg-ok); stroke-width: 3; transform-box: fill-box; transform-origin: center; animation: burst 1.4s ease-out 2; }
+.ring-trace tr.fresh td { animation: row-flash 1s ease-out; }
+@keyframes halo { 0% { opacity: .9; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes nc-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sg-active) 60%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
+@keyframes draw-arrow { to { stroke-dashoffset: 0; } }
+@keyframes burst { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(3.2); } }
+@keyframes row-flash { from { background: color-mix(in srgb, var(--sg-active) 22%, transparent); } to { background: transparent; } }
+@keyframes ring-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  #ring .halo, #ring .gather-burst { display: none; }
+  #ring .arrow { stroke-dasharray: none; stroke-dashoffset: 0; }
+}
+
+/* Phones: the next-move card first (it says what is going on), roomier buttons, the table without its last column. */
+@media (max-width: 600px) {
+  .ring-main { gap: 12px; }
+  .ring-group .btn { min-height: 38px; }
+  .ring-trace th:nth-child(6), .ring-trace td:nth-child(6) { display: none; }
+  .ring-lead { font-size: 13px; }
+}

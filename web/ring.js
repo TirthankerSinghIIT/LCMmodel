@@ -117,6 +117,17 @@ const SITUATION = {
   T6: "Three nodes in a row occupied", T7: "Two neighbouring nodes occupied", T8: "Gathered on one node",
 };
 const situation = (task) => SITUATION[task] ?? task ?? "—";
+// The same situations explained in full, for the card about the next move.
+const SITUATION_LONG = {
+  T1: "The occupied nodes are separated by several empty stretches (gaps). Only robots standing right next to one of the biggest gaps move; everybody else stays. Round by round this shrinks the space the robots spread over.",
+  T2: "There is at most one gap and it is short (four nodes or fewer), or there is no empty node at all. A robot with an empty neighbour stays; a robot with robots on both sides heads towards the nearest empty node, which reshapes the swarm towards a single block.",
+  T3: "There is exactly one gap and it is long (five nodes or more), so the robots stand in one unbroken block. Robots at the two ends of the block step out into the gap; robots inside the block stay.",
+  T4: "There are exactly two gaps: one is a single empty node, the other is longer. A robot that stands next to the longer gap with another robot on its other side steps towards that robot, pulling the group together away from the long gap.",
+  T5: "Only two nodes are occupied, with exactly one empty node between them. A robot next to that empty node steps into it, so the robots end up on neighbouring nodes.",
+  T6: "The robots occupy exactly three nodes in a row. Robots on the two end nodes step inwards onto the occupied neighbour; robots on the middle node stay, so the three nodes shrink to one.",
+  T7: "Only two nodes are occupied and they are neighbours. A robot on either of them steps onto the other one, which finishes the gathering.",
+  T8: "Every robot stands on the same node: the robots have gathered, and nobody moves any more.",
+};
 const why = (rule) => {
   const text = String(rule ?? "").replace(/^m\d+:\s*/, "").replace(/\bholes?\b/g, (w) => (w === "holes" ? "gaps" : "gap"));
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -152,39 +163,69 @@ function draw(last = null) {
     const isNext = state && state.status === "running" && ids[v].includes(state.next);
     // The robot that just stepped here alone appears when its slide arrives (see slide()).
     const arriving = last && last.from !== last.to && last.to === v && count[v] === 1;
+    if (isNext) svg += `<circle class="halo" cx="${x}" cy="${y}" r="${nodeR + 4}" pointer-events="none"/>`;
+    if (gathered) svg += `<circle class="gather-burst" cx="${x}" cy="${y}" r="${nodeR}" pointer-events="none"/>`;
     svg += `<circle class="robot${isNext ? " next" : ""}${gathered ? " ring-gathered" : ""}${arriving ? " arriving" : ""}" cx="${x}" cy="${y}" r="${nodeR - 3}" pointer-events="none"/>`;
     if (count[v] > 1) svg += `<text class="count" x="${x}" y="${y}" font-size="${font}">${count[v]}</text>`;
-    const shown = ids[v].length <= (n > 20 ? 1 : 3) ? ids[v].map((r) => `R${r}`).join(" ") : `R${ids[v][0]} +${ids[v].length - 1}`;
+    const shown = ids[v].length === 1 ? `R${ids[v][0]}` : `R${ids[v][0]} +${ids[v].length - 1}`; // hover the node for every name
     // Over 30 nodes, names are written only for the robot about to move; hover a node for the others.
-    if (n <= 30 || isNext) svg += `<text class="ids" x="${x * 0.78}" y="${y * 0.78}" font-size="${font}">${shown}</text>`;
+    // Written just inside the ring, anchored on the side facing the centre so longer names never reach the node.
+    const anchor = x > R * 0.25 ? "end" : x < -R * 0.25 ? "start" : "middle";
+    if (n <= 30 || isNext) svg += `<text class="ids" x="${x * 0.84}" y="${y * 0.8}" text-anchor="${anchor}" font-size="${font}">${shown}</text>`;
   }
   // Where the next robot will go.
   if (state && state.status === "running" && (state.move === 1 || state.move === -1)) {
     const from = positions[state.next], to = (from + state.move + n) % n;
     const a0 = -Math.PI / 2 + (2 * Math.PI * from) / n, a1 = -Math.PI / 2 + (2 * Math.PI * to) / n;
     const rr = R + nodeR + 8, sweep = state.move === 1 ? 1 : 0;
-    svg += `<path class="arrow" d="M${rr * Math.cos(a0)},${rr * Math.sin(a0)} A${rr},${rr} 0 0 ${sweep} ${rr * Math.cos(a1)},${rr * Math.sin(a1)}"/>`;
+    svg += `<path class="arrow" pathLength="1" d="M${rr * Math.cos(a0)},${rr * Math.sin(a0)} A${rr},${rr} 0 0 ${sweep} ${rr * Math.cos(a1)},${rr * Math.sin(a1)}"/>`;
   }
   $("ring").innerHTML = svg;
 
+  const gaps = (state?.holes ?? []).map((h) => h[1]).sort((a, b) => b - a);
   const facts = state ? [
     ["Status", STATUS[state.status] ?? state.status],
     ["Rounds", `${state.epochs} <span class="muted">of at most ${state.bound}</span>`],
-    ["Turns taken", state.turns],
+    ["Turns taken", `${state.turns} <span class="muted">· ${plural(trace.filter((t) => t.from !== t.to).length, "move")}</span>`],
     ["Robots · occupied nodes", `${positions.length} · ${count.filter((c) => c).length}`],
-    ["Next robot", state.status === "running" ? `R${state.next}` : "—"],
-    ["What it sees", state.status === "running" ? situation(state.task) : "—"],
-    ["What it does", state.status === "running" ? why(state.rule) + (state.move === 2 ? " (either side: ties decide)" : "") : "—"],
+    ["Gaps (empty stretches)", gaps.length ? gaps.join(", ") : "none"],
   ] : [["Robots", positions.length]];
   $("facts").innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  $("ring_bar").style.width = state ? `${Math.min(100, (100 * state.epochs) / Math.max(1, state.bound))}%` : "0%";
+  $("ring_bar").classList.toggle("done", gathered);
+  nextCard(positions, gathered);
   const stuck = state?.unsolvable?.replace(/\s*\([^)]*\)\s*$/, "");
   $("warning").hidden = !stuck;
   if (stuck) $("warning").innerHTML = `<strong>No algorithm can gather this start</strong> (${stuck}): taking turns in some order keeps the robots apart for ever. Watch it fail, or change the start.`;
   if (last) say(`<strong>R${last.robot}</strong> ${last.from === last.to ? `stays on node ${last.from}` : `steps ${last.from} → ${last.to}`} · ${why(last.rule)}`);
   else if (gathered) say("<strong>Gathered</strong>: every robot on one node.");
-  $("trace").querySelector("tbody").innerHTML = trace.slice(-200).reverse().map((t) =>
-    `<tr class="${t.from !== t.to ? "moved" : ""}"><td>${t.turn}</td><td>${t.epoch}</td><td>R${t.robot}</td><td>${t.from === t.to ? `stays ${t.from}` : `${t.from} → ${t.to}`}</td><td>${situation(t.task)}</td><td>${why(t.rule)}</td></tr>`).join("");
+  $("trace").querySelector("tbody").innerHTML = trace.slice(-200).reverse().map((t, k) =>
+    `<tr class="${t.from !== t.to ? "moved" : ""}${k === 0 && last ? " fresh" : ""}"><td>${t.turn}</td><td>${t.epoch}</td><td>R${t.robot}</td><td>${t.from === t.to ? `stays ${t.from}` : `${t.from} → ${t.to}`}</td><td>${situation(t.task)}</td><td>${why(t.rule)}</td></tr>`).join("");
   $("turns_count").textContent = trace.length ? `· ${trace.length}${trace.length > 200 ? " (latest 200 shown; CSV has all)" : ""}` : "";
+}
+
+const plural = (k, word) => `${k} ${word}${k === 1 ? "" : "s"}`;
+
+/** The card above the facts: whose turn it is, what that robot sees, and what it will do, in full sentences. */
+function nextCard(positions, gathered) {
+  const el = $("next_card");
+  if (!state) { el.innerHTML = `<div class="nc-head">Place robots to begin</div><p>Click nodes of the ring to put robots on them, or pick a preset above.</p>`; return; }
+  if (gathered) {
+    el.innerHTML = `<div class="nc-head done">Gathered on node ${positions[0]}</div><p>Every robot stands on the same node after ${state.epochs} round${state.epochs === 1 ? "" : "s"} and ${state.turns} turns, within the guaranteed ${state.bound}. Nobody moves any more.</p>`;
+    return;
+  }
+  if (state.status !== "running") {
+    el.innerHTML = `<div class="nc-head warn">${STATUS[state.status] ?? state.status}</div><p>${state.status === "stalled" ? "A whole round passed without any robot moving, so nothing can change any more: this start cannot be gathered under this turn order." : "The run stopped at its round limit before gathering."}</p>`;
+    return;
+  }
+  const n = start.nodes, from = positions[state.next];
+  const to = state.move === 1 || state.move === -1 ? (from + state.move + n) % n : null;
+  const does = to !== null ? `It will step from node ${from} to node ${to}.`
+    : state.move === 2 ? `It will step to one of its two neighbours; both are equally good, and the Ties setting decides which.`
+    : `It will stay on node ${from}.`;
+  el.innerHTML = `<div class="nc-head"><span class="nc-dot"></span>R${state.next}'s turn next <span class="muted">· node ${from}</span></div>`
+    + `<p><strong>What it sees.</strong> ${SITUATION_LONG[state.task] ?? situation(state.task)}</p>`
+    + `<p><strong>What it does.</strong> ${why(state.rule)}. ${does}</p>`;
 }
 
 /* Editing the start: click a node to add a robot, right-click (or long-press) to take one off. */
