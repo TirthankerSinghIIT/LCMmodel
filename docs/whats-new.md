@@ -3,7 +3,7 @@
 Three branches on the fork, each built on the one before: `extended-models` → `extras` → `ui-clean`
 (and `overnight`, small fixes on top). Every feature is a `SimConfig` field, so it works the same in
 the browser, in `lcm run` and in tests, and the defaults leave every earlier run unchanged (the
-Python parity fixtures still replay event by event). Open the page with `python3 scripts/serve.py`,
+Python parity fixtures still replay event by event). Open the page with `node scripts/serve.mjs`,
 then <http://localhost:8000/>.
 
 ## Schedulers and robot models (`extended-models`, `extras`)

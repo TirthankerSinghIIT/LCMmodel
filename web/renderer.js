@@ -29,8 +29,7 @@ export function fmtDistance(v) {
   return `${m}×10${[...String(Number(e))].map((c) => SUPERSCRIPT[c]).join("")}`;
 }
 
-// Same states and precedence as the Pyodide page (main.js colorForRobot), in a calmer palette: blues and
-// greens for robots at work, amber for waiting, slate for finished, reds and violets for faults.
+// Colours by robot state, fault and task.
 export const COLORS = [
   { key: "active", label: "Active", fill: "#3b82f6" },
   { key: "move", label: "Moving", fill: "#10b981" },

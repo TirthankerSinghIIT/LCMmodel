@@ -50,12 +50,10 @@ fn worst_overlap(c: &SimConfig, events: u64) -> usize {
             active[i] = true;
             looks[i].fill(0);
         }
-        for j in 0..n {
-            if active[j]
-                && s.robots().state[j] != RobotState::Look
-                && s.robots().state[j] != RobotState::Move
-            {
-                active[j] = false;
+        for (j, on) in active.iter_mut().enumerate() {
+            let state = s.robots().state[j];
+            if *on && state != RobotState::Look && state != RobotState::Move {
+                *on = false;
             }
         }
     }

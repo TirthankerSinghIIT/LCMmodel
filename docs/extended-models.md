@@ -66,8 +66,8 @@ model of Theorem 5 (`lcm_algorithms::notes`). It still refuses the async schedul
 
 ## 4. Ported algorithms
 
-Spreading (`Robot._spreading`) and TwoTask (`scheduler.py`'s red SEC / blue Gathering draw) are
-ported with 6 new recorded Python runs (`python reference/gen_fixtures.py spreading twotask`).
+Spreading and TwoTask (the original simulator's red SEC / blue Gathering draw) are ported with 6 new
+recorded runs of the original Python implementation (made before it was removed from the repository).
 Every algorithm of the original simulator except PatternFormation is now in the Rust core.
 
 ## 5. Page

@@ -3,6 +3,13 @@
 Work on the fork `TirthankerSinghIIT/LCMmodel`, built on the sequential scheduler and SqGathering
 (PRs #7 and #8 upstream). Nothing here has been merged into `drdebmath/LCMmodel` yet.
 
+> **One branch: `combined`.** Everything below (`extended-models`, `extras`, `ui-clean`, `overnight`,
+> `integrate-main`) is on the branch `combined`, together with upstream `main` up to 3efab0b (the
+> Python implementation removed, the Node flowchart generator and dev server). It merges into
+> `main` without conflicts. Checked on it: 229 Rust tests, 0 clippy warnings, browser = native bit
+> for bit (50 cases), every algorithm under every scheduler rigid and not (120 runs, no crash; see
+> `scripts/scheduler-matrix.mjs`), and the page checks. The older branches are kept only as history.
+
 ## In one paragraph
 
 The simulator gained three schedulers (SSYNC, FSYNC, k-ASYNC), four robot-model options
@@ -79,7 +86,7 @@ fixtures still replay event by event, and the browser build matches the native b
 | `cargo test --workspace` | 229 passed, 1 ignored (the long compass run: passes in 15 s with `--release --ignored`) |
 | `node scripts/check-wasm-parity.mjs` | browser build = native build, bit for bit; fixtures match the Python original |
 | `node scripts/check-seq-parity.mjs` | SqGathering traces identical (native, browser batch, browser step by step) |
-| `python3 scripts/gen-flowcharts.py --check` | flowcharts match the code |
+| `node scripts/gen-flowcharts.mjs --check` | flowcharts match the code |
 | Headless Chrome: `extras-check`, `sqgathering-check`, `responsive-check`, `docs-check`, `embed-check`, `ui-check` | all pass on GitHub Actions, except `ui-check`'s 10,000-robot frame-rate targets, which depend on the machine and are reported, not enforced (they miss on `main` too) |
 
 Every push to the fork runs all of the above on GitHub Actions.
@@ -140,7 +147,7 @@ Then, for each conflict:
 
 - **Generated files: never merge by hand; regenerate them.** `web/pkg/*` with
   `./scripts/build-wasm.sh`; `docs/flowcharts.md` and `web/docs.html` with
-  `python3 scripts/gen-flowcharts.py`.
+  `node scripts/gen-flowcharts.mjs`.
 - **`web/app.js`, `index.html`**: keep both sides. Last time the overlap was the export menu (links
   and embedding from `main`, scenario files from here) and the algorithm menu (the grouped menu from
   `web/menu.js` replaces the flat list).
@@ -151,7 +158,7 @@ Before pushing, run:
 ```bash
 cargo test --workspace
 node scripts/check-wasm-parity.mjs
-python3 scripts/gen-flowcharts.py --check
+node scripts/gen-flowcharts.mjs --check
 ```
 
 and the headless-browser checks listed above; then push and wait for GitHub Actions.

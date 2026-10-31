@@ -1,7 +1,7 @@
 //! LCM algorithms and the registry that names them.
 //!
 //! Each algorithm is a port of the matching `Robot._<name>` method pair
-//! (compute + terminal check) in `robot.py`, keeping its operation order.
+//! (compute + terminal check) in the original simulator, keeping its operation order.
 //! Adding an algorithm: implement [`Algorithm`] in a new module and add one
 //! line to [`REGISTRY`]. An entry builds its [`Plan`] from the run's
 //! [`SimConfig`], so an algorithm can use the seed, the robot count and the
@@ -65,7 +65,7 @@ fn one<A: Algorithm + Default + 'static>(_: &SimConfig) -> Result<Plan, ConfigEr
     Ok(Plan::single(Box::new(A::default())))
 }
 
-/// TwoTask (`scheduler.py`): each robot draws `u` in ID order; `u < 0.5`
+/// TwoTask (the original Python scheduler's draw): each robot draws `u` in ID order; `u < 0.5`
 /// runs SEC and shows red, the others run Gathering and show blue.
 #[allow(clippy::unnecessary_wraps)]
 fn two_task(_: &SimConfig) -> Result<Plan, ConfigError> {
