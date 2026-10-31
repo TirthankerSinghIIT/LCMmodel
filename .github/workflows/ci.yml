@@ -89,6 +89,9 @@ jobs:
       - name: Ring page and extras examples (headless Chrome)
         if: ${{ !cancelled() }}
         run: bash scripts/ci-check.sh "Ring page and examples" node scripts/extras-check.mjs "$RUNNER_TEMP/shots/extras"
+      - name: Info cards in the settings panel (headless Chrome)
+        if: ${{ !cancelled() }}
+        run: bash scripts/ci-check.sh "Info cards" node scripts/info-check.mjs "$RUNNER_TEMP/shots/info"
       - name: Set up from a link, and embedded in another page (headless Chrome)
         if: ${{ !cancelled() }}
         run: bash scripts/ci-check.sh "Links and embedding" node scripts/embed-check.mjs "$RUNNER_TEMP/shots/embed"

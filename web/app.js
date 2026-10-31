@@ -11,6 +11,7 @@ import { SimClient } from "./client.js";
 import { Inspector } from "./inspector.js";
 import { Overview } from "./overview.js";
 import { SETTINGS, buildSettings, readConfig } from "./settings.js";
+import { EXPLAINED, explain } from "./explain.js";
 import { ADVANCED, MENU_NAMES, menuHtml } from "./menu.js";
 import { parseCoordinates, startOutline } from "./start.js";
 import { Adversary } from "./adversary.js";
@@ -35,7 +36,14 @@ let frame = null;
 let restartTimer = 0; // a settings change waiting to rebuild the run (0 = none)
 let firstFrame = true;
 
-const settings = buildSettings($("settings_body"), onSettingChange);
+// Info cards under a setting: what the choice means, given the algorithm chosen now.
+const settings = buildSettings($("settings_body"), onSettingChange, {
+  explained: EXPLAINED,
+  explain: (key) => {
+    const k = algorithmKey(), a = algorithms.find((x) => x.key === k);
+    return explain(key, settings.values, a && { key: k, name: a.name, multiplicities: a.multiplicities, sequentialOnly: a.sequential_only });
+  },
+});
 if (Object.keys(link.settings).length) settings.apply(link.settings);
 renderIcons($("settings_body"));
 renderIcons($("coords"));

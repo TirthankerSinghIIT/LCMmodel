@@ -183,8 +183,9 @@ const decimals = (s) => (String(s.step ?? 1).split(".")[1] ?? "").length;
 const LOCK = `<svg class="lock" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
 const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-/** Builds the settings panel into `root`; `onChange(key, values)` fires on every edit. */
-export function buildSettings(root, onChange) {
+/** Builds the settings panel into `root`; `onChange(key, values)` fires on every edit.
+ *  `info`: { explain(key) -> card or null, explained: Set of keys } adds the info cards (web/explain.js). */
+export function buildSettings(root, onChange, info = null) {
   const values = Object.fromEntries(SETTINGS.map((s) => [s.key, s.value]));
   const fields = {};
   const mores = []; // per group: its "More options" box
@@ -265,6 +266,10 @@ export function buildSettings(root, onChange) {
       } else {
         const range = s.kind === "log" ? `min="0" max="${LOG_STEPS}" step="1"` : `min="${s.min}" max="${s.max}" step="${s.step}"`;
         field.innerHTML = `<div class="field-top">${label(`${id}-n`)}<input id="${id}-n" type="number" min="${s.min}" max="${s.max}" step="${s.step ?? 1}"></div><input id="${id}" type="range" ${range} aria-label="${s.label}">`;
+      }
+      if (info?.explained.has(s.key)) {
+        field.querySelector(".field-top label")?.insertAdjacentHTML("afterend",
+          `<button type="button" class="info-btn" data-info="${s.key}" aria-label="What does this setting mean?" title="What does this setting mean?" aria-expanded="false">i</button>`);
       }
       if (s.note) field.insertAdjacentHTML("beforeend", `<div class="sub note"></div>`);
       body.append(field);
@@ -385,6 +390,7 @@ export function buildSettings(root, onChange) {
       if (typeof s.label === "function") fields[s.key].querySelector("label").textContent = s.label(values);
       if (s.note) fields[s.key].querySelector(".note").textContent = s.note(values);
       if (s.showIf) fields[s.key].hidden = !s.showIf(values);
+      if (s.key === cardKey && fields[s.key].hidden) closeInfo();
       if (s.enabledBy) {
         const on = s.enabledBy(values);
         fields[s.key].classList.toggle("disabled", !on);
@@ -405,6 +411,50 @@ export function buildSettings(root, onChange) {
     for (const { group, details } of groupBoxes) if (group.showIf) details.hidden = !group.showIf(values);
     if (summary) summary.textContent = describeStart(values, customResult.points.length);
     fields.num_of_faults.querySelector('input[type="range"]').max = Math.min(1000, values.num_of_robots);
+  }
+
+  // Info cards: one at a time, inside the field it explains (so it moves with it into and out of
+  // "More options"). Changing a setting opens its card unless the reader turned that off; ⓘ always does.
+  let cardKey = null, cardTimer = 0;
+  let autoCards = true;
+  try { autoCards = localStorage.getItem("lcm-info-auto") !== "0"; } catch {}
+  function closeInfo() {
+    const card = cardKey && fields[cardKey]?.querySelector(".info-card");
+    if (cardKey) fields[cardKey]?.querySelector(".info-btn")?.setAttribute("aria-expanded", "false");
+    if (card) {
+      card.classList.add("leaving");
+      const done = () => card.remove();
+      card.addEventListener("animationend", done, { once: true });
+      setTimeout(done, 400); // reduced motion: no animation to wait for
+    }
+    cardKey = null;
+  }
+  function showInfo(key, { focus = false } = {}) {
+    const card = info?.explain(key);
+    if (!card || fields[key]?.hidden) { if (cardKey === key) closeInfo(); return; }
+    const html = `<div class="info-head"><span class="info-mark" aria-hidden="true">i</span><span class="info-title">${escapeHtml(card.title)}</span>`
+      + `<button type="button" class="info-close" aria-label="Close this explanation" title="Close">×</button></div>`
+      + card.paras.map((x) => `<p>${x}</p>`).join("")
+      + (card.tip ? `<p class="info-tip">${card.tip}</p>` : "")
+      + `<label class="info-auto"><input type="checkbox"${autoCards ? " checked" : ""}> Explain a setting whenever I change it</label>`;
+    let el = cardKey === key ? fields[key].querySelector(".info-card:not(.leaving)") : null;
+    if (!el) {
+      closeInfo();
+      el = document.createElement("div");
+      el.className = "info-card";
+      el.setAttribute("role", "note");
+      fields[key].append(el);
+    }
+    el.innerHTML = html; // same setting: the text follows the value without animating again
+    cardKey = key;
+    fields[key].querySelector(".info-btn")?.setAttribute("aria-expanded", "true");
+    el.querySelector(".info-close").addEventListener("click", () => { closeInfo(); fields[key]?.querySelector(".info-btn")?.focus(); });
+    el.querySelector(".info-auto input").addEventListener("change", (e) => {
+      autoCards = e.target.checked;
+      try { localStorage.setItem("lcm-info-auto", autoCards ? "1" : "0"); } catch {}
+    });
+    if (focus) el.querySelector(".info-close").focus({ preventScroll: true });
+    el.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
 
   function set(key, v, notify = true) {
@@ -434,7 +484,20 @@ export function buildSettings(root, onChange) {
     show(key);
     refresh();
     if (notify) onChange(key, values);
+    // A slider fires on every step: explain once it settles.
+    if (notify && autoCards && info?.explained.has(key)) {
+      clearTimeout(cardTimer);
+      cardTimer = setTimeout(() => showInfo(key), byKey[key].kind === "range" || byKey[key].kind === "log" ? 350 : 0);
+    } else if (notify && cardKey === key) showInfo(key);
   }
+
+  // ⓘ opens (or closes) the card of its setting.
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest(".info-btn");
+    if (!btn) return;
+    e.preventDefault();
+    if (cardKey === btn.dataset.info) closeInfo(); else showInfo(btn.dataset.info, { focus: true });
+  });
 
   for (const s of SETTINGS) {
     const f = fields[s.key], id = `set-${s.key}`;
@@ -461,6 +524,9 @@ export function buildSettings(root, onChange) {
     values,
     set,
     editor,
+    /** Opens the info card of `key` (web/explain.js), or closes the open one. */
+    showInfo,
+    closeInfo,
     /** Errors that stop a run from being built (custom coordinates only). */
     get problem() { return values.pattern === "custom" && customResult.errors.length ? customResult.errors : null; },
     get customPoints() { return customResult.points; },
