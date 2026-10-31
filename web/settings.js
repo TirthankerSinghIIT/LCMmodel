@@ -13,7 +13,8 @@ export const GROUPS = [
   { id: "visibility", label: "Visibility", open: true, tab: "model" },
   { id: "model", label: "Robot model", open: true, tab: "model" },
   { id: "faults", label: "Faults", open: true, tab: "model" },
-  { id: "timing", label: "Scheduler", open: true, tab: "timing" },
+  { id: "timing", label: "Scheduler", open: true, tab: "timing", describe: (v) => describeTiming(v) },
+  { id: "clock", label: "Clock and precision", open: true, tab: "timing" },
 ];
 /** The settings panel's tabs: which robots and where they start; what a robot can do and see; when robots act. */
 export const TABS = [["robots", "Robots"], ["model", "Model"], ["timing", "Timing"]];
@@ -82,7 +83,7 @@ export const SETTINGS = [
     showIf: (v) => !v.open_world, more: (v) => v.pattern !== "box" },
   { key: "multiplicities", group: "start", label: "Stacked points", kind: "range", min: 0, max: 50, step: 1, value: 0, more: true,
     hint: "Start with this many spots where several robots stand on top of each other (multiplicities), made from the start above. 0: none." },
-  { key: "multiplicity_size", group: "start", label: "Robots per stacked point", kind: "range", min: 0, max: 200, step: 1, value: 0, more: true,
+  { key: "multiplicity_size", group: "start", parent: "multiplicities", label: "Robots per stacked point", kind: "range", min: 0, max: 200, step: 1, value: 0, more: true,
     showIf: (v) => v.multiplicities > 0,
     hint: "At least 2. 0 lets the simulator choose: a third of the robots for one stacked point, up to 4 each for several." },
   { key: "custom", group: "start", label: "Positions", kind: "text", local: true,
@@ -93,23 +94,23 @@ export const SETTINGS = [
     hint: "Distance a robot covers per unit of simulated time." },
   { key: "rigid_movement", group: "movement", label: "Rigid movement", kind: "switch", value: true,
     hint: "Rigid: a robot always reaches its target. Off: set a minimum move δ below and robots can be stopped on the way. (Without δ, non-rigid robots still arrive, as in the original.)" },
-  { key: "delta", group: "movement", label: "Minimum move δ", kind: "range", min: 0, max: 500, step: 1, value: 0,
+  { key: "delta", group: "movement", parent: "rigid_movement", label: "Minimum move δ", kind: "range", min: 0, max: 500, step: 1, value: 0,
     showIf: (v) => !v.rigid_movement,
     hint: "A robot can be stopped on the way to its target, but never before it has covered δ (or reached the target, if that is nearer). 0: robots always arrive, as in the original." },
-  { key: "stop_policy", group: "movement", label: "Where it stops", kind: "select", value: "random",
+  { key: "stop_policy", group: "movement", parent: "rigid_movement", label: "Where it stops", kind: "select", value: "random",
     options: [["delta", "Right after δ"], ["random", "Anywhere after δ, at random"], ["fraction", "After a fraction of the way"]],
     showIf: (v) => !v.rigid_movement && v.delta > 0,
     hint: "Who decides where a stopped robot ends up: the worst case (just δ), a random point, or a fixed fraction of its way." },
-  { key: "stop_fraction", group: "movement", label: "Fraction of the way", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.5,
+  { key: "stop_fraction", group: "movement", parent: "rigid_movement", label: "Fraction of the way", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.5,
     showIf: (v) => !v.rigid_movement && v.delta > 0 && v.stop_policy === "fraction",
     hint: "How far along its way a stopped robot gets (never less than δ)." },
   { key: "unlimited_visibility", group: "visibility", label: "Unlimited visibility", kind: "switch", value: true, local: true,
     hint: "Every robot sees every other robot." },
-  { key: "visibility_radius", group: "visibility", label: "Radius", kind: "range", min: 10, max: 1000, step: 10, value: 150,
-    enabledBy: (v) => !v.unlimited_visibility, hint: "How far a robot can see." },
+  { key: "visibility_radius", group: "visibility", parent: "unlimited_visibility", label: "Radius", kind: "range", min: 10, max: 1000, step: 10, value: 150,
+    showIf: (v) => !v.unlimited_visibility, hint: "How far a robot can see." },
   { key: "obstructed_visibility", group: "visibility", label: "Robots block the view", kind: "switch", value: false,
     hint: "A robot does not see a robot hidden behind another one (obstructed visibility). Each Look then costs time proportional to n², so keep the swarm small." },
-  { key: "robot_radius", group: "visibility", label: "Robot radius", kind: "range", min: 0, max: 20, step: 0.5, value: 0,
+  { key: "robot_radius", group: "visibility", parent: "obstructed_visibility", label: "Robot radius", kind: "range", min: 0, max: 20, step: 0.5, value: 0,
     showIf: (v) => v.obstructed_visibility,
     hint: "Robots block the view as discs of this radius. 0: points, which block only robots exactly in line behind them." },
   { key: "multiplicity", group: "model", label: "Multiplicity detection", kind: "select", value: "weak",
@@ -118,16 +119,16 @@ export const SETTINGS = [
   { key: "frames", group: "model", label: "Coordinate frames", kind: "select", value: "global",
     options: [["global", "Global: all robots share one frame"], ["rotated", "Own frame: random rotation and unit"], ["disoriented", "Disoriented: also random handedness"], ["compass", "Compass with an error of up to φ"]],
     hint: "At each Look a robot can get a private coordinate system of its own, with itself at the origin. An algorithm that only uses distances and angles behaves the same; one that uses the axes (Spreading's grid) does not. Compass: the robot's north is off by at most φ." },
-  { key: "compass_error", group: "model", label: "Compass error φ °", kind: "range", min: 0, max: 180, step: 1, value: 30,
+  { key: "compass_error", group: "model", parent: "frames", label: "Compass error φ °", kind: "range", min: 0, max: 180, step: 1, value: 30,
     showIf: (v) => v.frames === "compass",
     hint: "The largest angle between a robot's north and the true north. Units and handedness stay shared." },
-  { key: "compass_static", group: "model", label: "Static compass", kind: "switch", value: true,
+  { key: "compass_static", group: "model", parent: "frames", label: "Static compass", kind: "switch", value: true,
     showIf: (v) => v.frames === "compass",
     hint: "On: each robot keeps one error for the whole run. Off (dynamic): a new error at every Look." },
   { key: "num_of_faults", group: "faults", label: "Faulty robots", kind: "range", min: 0, max: 1000, step: 1, value: 0,
     hint: "How many robots, chosen at random, have a fault." },
-  { key: "fault_type", group: "faults", label: "Fault type", kind: "select", value: "crash",
-    enabledBy: (v) => v.num_of_faults > 0,
+  { key: "fault_type", group: "faults", parent: "num_of_faults", label: "Fault type", kind: "select", value: "crash",
+    showIf: (v) => v.num_of_faults > 0,
     options: [["crash", "Crash: stops for good"], ["byzantine", "Byzantine: moves erratically"],
       ["omission", "Omission: skips half its moves"], ["delay", "Delay: 40 % speed"], ["mixed", "Mixed: all four"]] },
   { key: "scheduler", group: "timing", label: "Scheduler", kind: "select", value: "async",
@@ -135,42 +136,43 @@ export const SETTINGS = [
       ["ssync", "SSYNC: rounds, some robots at once"], ["fsync", "FSYNC: rounds, every robot at once"],
       ["kasync", "k-ASYNC: async, bounded overlap"]],
     hint: "Async: every robot wakes on its own random clock, so many can be moving at once. Sequential: one robot does its whole Look, Compute and Move while every other robot stays still. SSYNC: in each round a set of robots looks at the same instant, then they all move; FSYNC: every robot, every round." },
-  { key: "k_async", group: "timing", label: "k (Looks per cycle)", kind: "range", min: 1, max: 20, step: 1, value: 1,
+  { key: "k_async", group: "timing", parent: "scheduler", label: "k (Looks per cycle)", kind: "range", min: 1, max: 20, step: 1, value: 1,
     showIf: (v) => v.scheduler === "kasync",
     hint: "k-ASYNC: while one robot is in a cycle, no other robot starts more than k Looks. A Look that would is put off until a cycle ends." },
-  { key: "ssync_probability", group: "timing", label: "Chance to be active", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.5,
+  { key: "ssync_probability", group: "timing", parent: "scheduler", label: "Chance to be active", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.5,
     showIf: (v) => v.scheduler === "ssync",
     hint: "SSYNC: each robot still moving is active in a round with this chance. A round with nobody drawn activates one robot at random." },
-  { key: "ssync_fairness", group: "timing", label: "Fairness bound", kind: "range", min: 1, max: 50, step: 1, value: 4,
+  { key: "ssync_fairness", group: "timing", parent: "scheduler", label: "Fairness bound", kind: "range", min: 1, max: 50, step: 1, value: 4,
     showIf: (v) => v.scheduler === "ssync",
     hint: "SSYNC: a robot left out of this many rounds in a row is active in the next one, so every robot gets to act." },
-  { key: "activation_order", group: "timing", label: "Turn order", kind: "select", value: "round_robin",
+  { key: "activation_order", group: "timing", parent: "scheduler", label: "Turn order", kind: "select", value: "round_robin",
     options: [["round_robin", "Round-robin: 0, 1, 2, …"], ["random", "Random: reshuffled every epoch"]],
     showIf: (v) => v.scheduler === "sequential",
     hint: "Who goes next. Each epoch, every robot still moving gets exactly one turn; crashed and terminated robots are skipped. Random uses the seed, so a run repeats." },
-  { key: "turn_gap", group: "timing", label: "Pause between turns", kind: "select", value: "random",
+  { key: "turn_gap", group: "timing", parent: "scheduler", label: "Pause between turns", kind: "select", value: "random",
     options: [["random", "Random (rate λ)"], ["none", "None"]],
     showIf: (v) => v.scheduler !== "async" && v.scheduler !== "kasync",
     hint: "Simulated time between one turn (or round) ending and the next one starting. None: at once." },
-  { key: "schedule_text", group: "timing", label: (v) => (v.scheduler === "ssync" ? "Rounds" : "Turns"), kind: "line", value: "", local: true,
+  { key: "schedule_text", group: "timing", parent: "scheduler", label: (v) => (v.scheduler === "ssync" ? "Rounds" : "Turns"), kind: "line", value: "", local: true,
     showIf: (v) => v.scheduler === "sequential" || v.scheduler === "ssync", more: true,
     hint: "An explicit schedule instead of the order above. Sequential: robots in turn order, e.g. 0, 2, 1 (add @0.5 to stop a robot halfway: non-rigid with δ). SSYNC: the robots of each round, rounds separated by |, e.g. 0 1 | 2 3. Empty: the scheduler's own order. Playing the adversary (toolbar) writes one for you." },
-  { key: "schedule_repeat", group: "timing", label: "After the list", kind: "select", value: "repeat", local: true,
+  { key: "schedule_repeat", group: "timing", parent: "scheduler", label: "After the list", kind: "select", value: "repeat", local: true,
     options: (v) => [["repeat", "Play it again"], ["round_robin", v.scheduler === "ssync" ? "Random rounds" : "Round-robin"]],
     showIf: (v) => (v.scheduler === "sequential" || v.scheduler === "ssync") && v.schedule_text.trim() !== "", more: true,
     hint: "What follows the end of the list. Playing it again needs every robot in it, to stay fair." },
-  { key: "max_turns", group: "timing", label: "Turn limit", kind: "number", min: 0, max: 1000000000, value: 0,
+  { key: "max_turns", group: "timing", parent: "scheduler", label: "Turn limit", kind: "number", min: 0, max: 1000000000, value: 0,
     showIf: (v) => v.scheduler === "sequential",
     hint: "Stop after this many turns (one robot's whole Look, Compute and Move each). 0: no limit." },
-  { key: "max_rounds", group: "timing", label: "Round limit", kind: "number", min: 0, max: 1000000000, value: 0,
+  { key: "max_rounds", group: "timing", parent: "scheduler", label: "Round limit", kind: "number", min: 0, max: 1000000000, value: 0,
     showIf: (v) => v.scheduler === "ssync" || v.scheduler === "fsync",
     hint: "Stop after this many rounds. 0: no limit." },
-  { key: "lambda_rate", group: "timing", label: "Activation rate λ", kind: "range", min: 0.1, max: 20, step: 0.1, value: 5,
-    enabledBy: (v) => v.scheduler === "async" || v.scheduler === "kasync" || v.turn_gap === "random",
+  { key: "lambda_rate", group: "clock", label: "Activation rate λ", kind: "range", min: 0.1, max: 20, step: 0.1, value: 5,
+    showIf: (v) => v.scheduler === "async" || v.scheduler === "kasync" || v.turn_gap === "random",
+    note: (v) => `On average every ${+(1 / v.lambda_rate).toFixed(2)} time units`,
     hint: "Async: robots wake up after exponential delays with this rate (mean 1/λ). Sequential: the random pause between turns has this rate." },
-  { key: "sampling_rate", group: "timing", label: "Sampling interval", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.1,
+  { key: "sampling_rate", group: "clock", label: "Sampling interval", kind: "range", min: 0.05, max: 1, step: 0.05, value: 0.1, more: true,
     hint: "Period of the scheduler's Visualize tick (kept for parity with the original)." },
-  { key: "threshold_precision", group: "timing", label: "Precision (10⁻ᵖ)", kind: "range", min: 2, max: 15, step: 1, value: 5,
+  { key: "threshold_precision", group: "clock", label: "Precision (10⁻ᵖ)", kind: "range", min: 2, max: 15, step: 1, value: 5,
     note: (v) => `ε = ${Math.pow(10, -v.threshold_precision).toFixed(v.threshold_precision)} world units`,
     hint: "ε = 10^-p: moves shorter than ε count as arrived; robots within ε count as gathered." },
 ];
@@ -183,6 +185,27 @@ const decimals = (s) => (String(s.step ?? 1).split(".")[1] ?? "").length;
 const LOCK = `<svg class="lock" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
 const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+/** One sentence on how the robots are timed with these settings (under the Scheduler group). */
+export function describeTiming(v) {
+  const unit = v.scheduler === "sequential" ? "turn" : "round";
+  const pause = v.turn_gap === "none" ? `the next ${unit} starts at once` : `a random pause before each ${unit}`;
+  const turnLimit = v.max_turns > 0 ? `; stops after ${v.max_turns.toLocaleString()} turns` : "";
+  const roundLimit = v.max_rounds > 0 ? `; stops after ${v.max_rounds.toLocaleString()} rounds` : "";
+  const listed = v.schedule_text?.trim() ? ", following your list of turns" : "";
+  switch (v.scheduler) {
+    case "sequential":
+      return `One robot at a time${listed || (v.activation_order === "random" ? ", in a new random order each epoch" : ", in the order 0, 1, 2, …")}; ${pause}${turnLimit}.`;
+    case "ssync":
+      return `Rounds: each robot acts with chance ${v.ssync_probability} and is never left out more than ${v.ssync_fairness} rounds in a row${listed ? ", following your list of rounds" : ""}; ${pause}${roundLimit}.`;
+    case "fsync":
+      return `Rounds with every robot at once; ${pause}${roundLimit}.`;
+    case "kasync":
+      return `Robots wake on their own clocks, but no robot takes more than ${v.k_async} snapshot${v.k_async === 1 ? "" : "s"} while another is in the middle of its cycle.`;
+    default:
+      return `Robots wake on their own clocks, each about every ${+(1 / v.lambda_rate).toFixed(2)} time units, so several can be moving at once.`;
+  }
+}
+
 /** Builds the settings panel into `root`; `onChange(key, values)` fires on every edit.
  *  `info`: { explain(key) -> card or null, explained: Set of keys } adds the info cards (web/explain.js). */
 export function buildSettings(root, onChange, info = null) {
@@ -194,7 +217,7 @@ export function buildSettings(root, onChange, info = null) {
   // and put back when the algorithm no longer fixes it.
   let frozen = {};
   const saved = {};
-  let summary = null; // the sentence saying what the start settings give
+  const summaries = []; // per group with `describe`: [group, <p>] — a sentence saying what its settings give
   let customResult = parseCoordinates(values.custom);
   const optionsOf = (s) => (typeof s.options === "function" ? s.options(values) : s.options);
 
@@ -246,7 +269,7 @@ export function buildSettings(root, onChange, info = null) {
     const own = SETTINGS.filter((x) => x.group === g.id);
     for (const s of own) {
       const field = document.createElement("div");
-      field.className = "field";
+      field.className = s.parent ? "field sub-option" : "field";
       field.dataset.key = s.key;
       const id = `set-${s.key}`;
       // The help text shows on hovering the label (dotted underline).
@@ -283,11 +306,12 @@ export function buildSettings(root, onChange, info = null) {
       body.append(card);
     }
     if (g.describe) {
-      summary = document.createElement("p");
+      const summary = document.createElement("p");
       summary.className = "start-summary";
       summary.id = `${g.id}-summary`;
       summary.setAttribute("aria-live", "polite");
       body.append(summary);
+      summaries.push([g, summary]);
     }
     if (own.some((x) => x.more)) {
       const more = document.createElement("details");
@@ -301,6 +325,7 @@ export function buildSettings(root, onChange, info = null) {
   }
   placeTabs();
   selectTab(tab);
+  let built = false; // settings shown while the panel is built do not animate
   /** Marks the tabs holding a setting the chosen algorithm locks. */
   function markTabs() {
     for (const [id] of TABS) {
@@ -382,14 +407,22 @@ export function buildSettings(root, onChange, info = null) {
         (more ? m.body : m.main).append(fields[s.key]);
         if (more && (!s.showIf || s.showIf(values))) any = true;
       }
-      if (summary && m.main.contains(summary)) m.main.append(summary);
+      for (const [, summary] of summaries) if (m.main.contains(summary)) m.main.append(summary);
       m.main.append(m.details);
       m.details.hidden = !any;
     }
     for (const s of SETTINGS) {
       if (typeof s.label === "function") fields[s.key].querySelector("label").textContent = s.label(values);
       if (s.note) fields[s.key].querySelector(".note").textContent = s.note(values);
-      if (s.showIf) fields[s.key].hidden = !s.showIf(values);
+      if (s.showIf) {
+        const f = fields[s.key], hide = !s.showIf(values);
+        if (f.hidden && !hide && built) { // it appears because of a choice just made: let it fade in
+          f.classList.remove("appear");
+          void f.offsetWidth;
+          f.classList.add("appear");
+        }
+        f.hidden = hide;
+      }
       if (s.key === cardKey && fields[s.key].hidden) closeInfo();
       if (s.enabledBy) {
         const on = s.enabledBy(values);
@@ -409,7 +442,9 @@ export function buildSettings(root, onChange, info = null) {
       } else note?.remove();
     }
     for (const { group, details } of groupBoxes) if (group.showIf) details.hidden = !group.showIf(values);
-    if (summary) summary.textContent = describeStart(values, customResult.points.length);
+    for (const [g, summary] of summaries) {
+      summary.textContent = typeof g.describe === "function" ? g.describe(values) : describeStart(values, customResult.points.length);
+    }
     fields.num_of_faults.querySelector('input[type="range"]').max = Math.min(1000, values.num_of_robots);
   }
 
@@ -519,6 +554,7 @@ export function buildSettings(root, onChange, info = null) {
   refresh();
   for (const s of SETTINGS) show(s.key);
   refresh();
+  built = true;
 
   return {
     values,

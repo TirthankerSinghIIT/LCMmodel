@@ -2,7 +2,9 @@
 // of every explained setting has a card with a title and at least one
 // paragraph; changing a setting opens its card under it, ⓘ opens and closes
 // one, only one is open at a time, a card whose setting disappears goes with
-// it, turning the cards off is remembered, and the card fits a phone.
+// it, turning the cards off is remembered, and the card fits a phone. Also
+// the panel's arrangement: the scheduler's sentence, nested sub-options, and
+// that only a newly added note in the brief animates.
 //   node scripts/info-check.mjs [screenshot-dir]
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -96,6 +98,36 @@ check("with the cards turned off, a change opens none (remembered after reload)"
 await js("document.querySelector('.info-btn[data-info=\"scheduler\"]').click()");
 await sleep(500);
 check("…and ⓘ still opens one", (await openCard())[0]?.title.startsWith("Fully synchronous"));
+await js("localStorage.removeItem('lcm-info-auto')");
+
+// The arrangement: a sentence under the scheduler, options nested under the choice they belong to.
+await open(1400, 900, false);
+await js("localStorage.setItem('lcm-info-auto', '0')");
+await js("document.querySelector('#tab-timing').click()");
+await change("scheduler", "sequential");
+await change("turn_gap", "none");
+await sleep(300);
+check("the scheduler group says in one sentence how robots are timed",
+  /^One robot at a time.*the next turn starts at once/.test(await js("document.getElementById('timing-summary').textContent")),
+  await js("document.getElementById('timing-summary').textContent"));
+check("options of the scheduler are drawn nested under it", await js(`['activation_order', 'turn_gap', 'max_turns'].every((k) =>
+  document.querySelector('[data-key="' + k + '"]').classList.contains('sub-option'))`));
+check("with no pause between turns, λ is out of the way", await js("document.querySelector('[data-key=\"lambda_rate\"]').hidden"));
+await change("scheduler", "kasync");
+await sleep(300);
+check("a sub-option that appears fades in", await js("document.querySelector('[data-key=\"k_async\"]').classList.contains('appear')"));
+// Only a note that a change brings in animates; the others stay still.
+await js("document.querySelector('#algorithm').value = 'SqGathering'; document.querySelector('#algorithm').dispatchEvent(new Event('change', { bubbles: true }))");
+await sleep(800);
+await js("document.querySelector('#tab-model').click()");
+await change("multiplicity", "none");
+await sleep(900);
+const before = await js("[...document.querySelectorAll('#model_notes .brief-notes li')].map((li) => li.className)");
+await change("unlimited_visibility", false);
+await sleep(900);
+const after = await js("[...document.querySelectorAll('#model_notes .brief-notes li')].map((li) => li.className)");
+check("a note brought in by a change slides in; notes already shown stay still",
+  after.length === before.length + 1 && after.filter((c) => c.includes("fresh")).length === 1, JSON.stringify({ before, after }));
 await js("localStorage.removeItem('lcm-info-auto')");
 
 // A phone: the card fits the settings sheet.

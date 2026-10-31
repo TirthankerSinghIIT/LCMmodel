@@ -132,6 +132,14 @@ body.clean .panel:not(.keep) { display: none !important; }
 .field-top label.has-hint { flex: 0 1 auto; margin-right: auto; cursor: help; text-decoration: underline dotted var(--text-3); text-underline-offset: 3px; }
 .field.disabled { opacity: 0.45; }
 .field .sub { color: var(--text-3); font-size: 11.5px; }
+/* A setting that exists because of the one above it (δ under non-rigid movement, k under k-ASYNC, …):
+   drawn nested under its parent, and faded in when a choice makes it appear. */
+.field.sub-option { margin-left: 4px; padding-left: 10px; border-left: 2px solid var(--border-strong); }
+.field.sub-option:has(.info-card) { border-left-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.field.appear { animation: field-in .28s cubic-bezier(.2, .8, .25, 1) both; }
+@keyframes field-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+/* The sentence under a group saying what its settings give (the start, the scheduler). */
+#timing-summary { border-left: 3px solid var(--accent); }
 /* Info cards (web/explain.js): a round ⓘ next to the label, and the card that unfolds under the setting. */
 .field-top label:has(+ .info-btn) { flex: 0 1 auto; margin-right: 0; }
 .info-btn {
@@ -418,6 +426,20 @@ kbd { color: var(--text); font-family: var(--mono); font-size: 11.5px; padding: 
 
 #toast { position: fixed; z-index: 50; left: 50%; bottom: 16px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; background: var(--surface-solid); border: 1px solid var(--border); box-shadow: var(--shadow); max-width: calc(100vw - 32px); }
 #toast.error { color: var(--danger); border-color: var(--danger); }
+/* Things that come and go: the toast pops up, captions and side panels rise in, the brief unfolds, a note that
+   a change of settings brings in slides in with a brief highlight. (Reduced motion turns all of it off.) */
+#toast:not([hidden]) { animation: toast-in .26s cubic-bezier(.2, .8, .25, 1) both; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px) scale(.97); } to { opacity: 1; transform: translate(-50%, 0); } }
+#turn_caption:not([hidden]), .side-panel:not([hidden]) { animation: rise-in .3s cubic-bezier(.2, .8, .25, 1) both; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#model_notes .brief-body.opening { animation: unfold .28s cubic-bezier(.2, .8, .25, 1) both; transform-origin: top; }
+@keyframes unfold { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+#model_notes .brief-notes li.fresh { animation: note-in .45s cubic-bezier(.2, .8, .25, 1) both; animation-delay: calc(var(--i) * 70ms); border-radius: 6px; }
+@keyframes note-in {
+  0% { opacity: 0; transform: translateX(-8px); background: transparent; }
+  45% { opacity: 1; transform: none; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  100% { opacity: 1; transform: none; background: transparent; }
+}
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 

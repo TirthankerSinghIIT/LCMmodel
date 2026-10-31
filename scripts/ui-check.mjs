@@ -216,7 +216,7 @@ check("async is the default; turn order, pause and epochs only show for sequenti
 await js("lcm.settings.set('scheduler', 'sequential'); lcm.settings.set('num_of_robots', 30); lcm.settings.set('robot_speeds', 10)");
 check("sequential shows the turn order and the pause between turns", (await js(shown("activation_order"))) && (await js(shown("turn_gap"))));
 await js("lcm.settings.set('turn_gap', 'none')");
-check("with no pause between turns, λ is greyed out", await js("document.getElementById('set-lambda_rate').disabled"));
+check("with no pause between turns, λ (which only sets the pauses) is hidden", await js("document.querySelector('[data-key=\"lambda_rate\"]').hidden"));
 await js("lcm.settings.set('turn_gap', 'random'); lcm.settings.set('activation_order', 'random')");
 check("λ sets the random pause", !(await js("document.getElementById('set-lambda_rate').disabled")));
 await until("lcm.state === 'ready' && lcm.renderer.frame.robots === 30", 3000);

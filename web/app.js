@@ -98,7 +98,7 @@ function setAdversary(on) {
 // The box under the toolbar: what the chosen algorithm does, the robots and model this run uses (settings the
 // algorithm fixes carry a lock), and, from the core with the run's first frame, where the settings leave what
 // the algorithm was made for. It folds to one line while a run plays; a click opens it again.
-const brief = { notes: [], open: true };
+const brief = { notes: [], open: true, seen: new Set(), opening: false }; // seen: notes already on screen (only new ones animate)
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const SCHEDULER_WORDS = { async: "Async", sequential: "One at a time", ssync: "Some at once · SSYNC", fsync: "All at once · FSYNC", kasync: "k-ASYNC" };
 const MULTIPLICITY_WORDS = { none: "Can't see stacks", local: "Knows if its own spot is shared", weak: "Sees stacks", strong: "Counts stacks" };
@@ -142,11 +142,15 @@ function renderBrief() {
     + `<p class="brief-rule">${esc(RULES[key] ?? "")}</p>`
     + `<div class="brief-chips">${briefChips(settings.values, key).map(([text, k]) =>
       `<span class="chip-tag${locks[k] ? " locked" : ""}"${locks[k] ? ` title="Fixed for this algorithm: ${esc(locks[k].reason)}"` : ""}>${locks[k] ? icon("lock", 11) : ""}${esc(text)}</span>`).join("")}</div>`
-    + (notes.length ? `<ul class="brief-notes">${notes.map((x) =>
-      `<li class="${x.kind}">${icon(x.kind === "info" ? "info" : "warn", 13)}<span>${x.tag ? `<b>${x.tag}.</b> ` : ""}${esc(x.text)}</span></li>`).join("")}</ul>` : "")
+    + (notes.length ? `<ul class="brief-notes">${notes.map((x, i) =>
+      `<li class="${x.kind}${brief.seen.has(x.text) ? "" : " fresh"}" style="--i:${i}">${icon(x.kind === "info" ? "info" : "warn", 13)}<span>${x.tag ? `<b>${x.tag}.</b> ` : ""}${esc(x.text)}</span></li>`).join("")}</ul>` : "")
     + `</div>`;
+  if (brief.opening) { el.querySelector(".brief-body")?.classList.add("opening"); brief.opening = false; }
+  // Remember what is on screen, so only notes a change brings in animate. Folded, they still count as new when it
+  // opens; and the moment of no notes while a new run starts is not remembered, or every note would animate again.
+  if (brief.open && notes.length) brief.seen = new Set(notes.map((x) => x.text));
   renderIcons(el);
-  el.querySelector(".brief-head").addEventListener("click", () => { brief.open = !brief.open; renderBrief(); });
+  el.querySelector(".brief-head").addEventListener("click", () => { brief.open = !brief.open; brief.opening = brief.open; renderBrief(); });
 }
 /** Notes from the core for the current run (empty while a new run starts). */
 function showNotes(notes) { brief.notes = notes; renderBrief(); }
