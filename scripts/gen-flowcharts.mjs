@@ -446,29 +446,30 @@ const CHARTS = [
         "title": "SqGathering (Algorithm 8)",
         "short": "Gathering with weak multiplicity detection, one robot per turn",
         "blurb": (
-            "Algorithm 8 of \"Universal pattern formation by oblivious robots under sequential " +
-            "schedulers\" (arXiv:2412.10733, Section 6). The active robot sees each occupied point " +
-            "only as single or multiplicity, counts the multiplicities κ, and follows one of three " +
-            "rules. It runs only under the sequential scheduler of chart 5: the registry refuses the " +
-            "async one."
+            "Gathering one robot at a time, for robots that can tell a stack (several robots on one " +
+            "spot) from a single robot, but cannot count it. The active robot sees each occupied " +
+            "point only as single or stacked, counts the stacks κ, and follows one of three rules. It " +
+            "is made for the sequential scheduler of chart 5: the asynchronous schedulers are refused, " +
+            "and the round-based ones can be chosen to watch what goes wrong."
         ),
         "notes": [
             "Weak multiplicity detection: one bit per point, never a count. Two robots on a point and " +
-            "five robots on a point look the same.",
-            "Why the sequential scheduler: without multiplicity detection Gathering is unsolvable " +
-            "under any sequential scheduler (Theorem 4); with more than one robot active at once it is " +
-            "unsolvable even with detection (Lemma 8). So SqGathering refuses the async scheduler, " +
-            "limited visibility and faults.",
-            "In the paper robots never terminate. Here a robot that sees a single occupied point " +
-            "terminates: everyone is there, and every robot activated later would stay, so it changes " +
-            "nothing and lets the run end.",
+            "five robots on a point look exactly the same.",
+            "Why one robot at a time: robots that cannot see stacks can never be sure to gather, even " +
+            "one at a time, and when several robots act at once a stack can move as a whole instead " +
+            "of breaking up, so two stacks may never merge. SqGathering therefore refuses the " +
+            "asynchronous schedulers and faulty robots; under SSYNC or FSYNC, with no or local " +
+            "detection, or with limited or blocked sight, the page explains what to expect.",
+            "Robots in the original rule never stop. Here a robot that sees a single occupied point " +
+            "terminates: everyone is already there, and every robot activated later would stay put, " +
+            "so stopping changes nothing and lets the run end.",
             "Points closer than ε (10^-precision) are one point. Equally close points are told apart " +
-            "by their coordinates; any fixed choice is allowed.",
-            "A move cut short after δ can stop on a single robot and make a second multiplicity; the " +
-            "κ > 1 rule then separates them again.",
-            "With several large multiplicities, each robot leaving one halves the distance of the " +
-            "robot that left before it. After enough of them it is closer than ε, cannot leave, and " +
-            "the run ends Stalled (chart 5): a precision limit, not a flaw of the algorithm.",
+            "by their coordinates; any fixed choice works.",
+            "A move cut short after δ can stop on a single robot and make a second stack; the rule " +
+            "for several stacks then separates them again.",
+            "With several large stacks, each robot leaving one lands halfway to the robot that left " +
+            "before it. After enough of them it is closer than ε, cannot leave, and the run ends " +
+            "Stalled (chart 5): a limit of the numbers, not a flaw of the rule.",
         ],
         "lanes": ["rows", [["From the snapshot", 0, 1], ["Gathered?", 2, 2], ["Algorithm 8", 3, 5]]],
         "nodes": [
@@ -483,7 +484,7 @@ const CHARTS = [
                  "swarm has gathered. Then κ = 1 and b = 1, so Algorithm 8 would keep it there anyway."),
             node("q_term", "Terminate", 0, 2, "end", null, "gathered",
                  "The robot stops for good and gets no more turns. Once every robot has had its turn and " +
-                 "terminated, the run ends (chart 1). The paper's robots never stop; terminating here " +
+                 "terminated, the run ends (chart 1). The original rule's robots never stop; terminating here " +
                  "changes nothing, because every robot activated later would stay put."),
             node("q_kappa", "How many multiplicities κ?", 2, 3, "decision", [SQ, "decide"], "decide() · lines 1-3",
                  "Count the points marked multiplicity, and look at b, the bit of the robot's own point. " +

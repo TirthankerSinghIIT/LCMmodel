@@ -347,11 +347,11 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
         SchedulerKind::Async | SchedulerKind::KAsync
     ) {
         return refuse(
-            "SqGathering needs the sequential scheduler (Settings → Scheduler → Sequential): with more than one robot active at once, gathering is unsolvable even with multiplicity detection (Lemma 8 of the paper). SSYNC and FSYNC can be chosen to see why.",
+            "SqGathering does not run under this scheduler. Pick the sequential scheduler (Settings → Timing → Scheduler → Sequential), where one robot moves at a time and every robot sees an exact, up-to-date picture. When robots wake up on their own clocks, a robot can act on a picture that is already out of date, and with more than one robot active at once gathering can no longer be guaranteed, even for robots that can see stacks. SSYNC and FSYNC can be chosen as well, to watch what goes wrong when robots act in rounds.",
         );
     }
     if config.num_of_faults > 0 {
-        return refuse("SqGathering assumes no faulty robots: set Faulty robots to 0");
+        return refuse("SqGathering is designed for robots that never fail: a faulty robot that crashes or misbehaves can keep the others from ever agreeing on one spot. Set Faulty robots to 0 (Settings → Model → Faults).");
     }
     Ok(Plan::single(Box::new(SqGathering)))
 }
@@ -363,36 +363,36 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = Vec::new();
     match config.scheduler {
         SchedulerKind::Ssync => notes.push(
-            "Outside the model: with robots acting in rounds no rule can always gather, even when robots see stacks: if every robot of a stack moves at once each time, two stacks keep approaching without ever merging."
+            "Outside the model: SqGathering is designed for one robot at a time, and here robots act in rounds, several at once. When every robot on a stack moves at the same moment, the stack moves as a whole instead of breaking up, so two stacks can keep stepping towards each other without ever merging. No rule can rule this out for every possible choice of who acts in each round, so expect some runs that never gather."
                 .to_owned(),
         ),
         SchedulerKind::Fsync => notes.push(
-            "Outside the model: this rule is made for one robot at a time. With every robot moving at once other rules gather (go to the centre of the smallest enclosing circle); whether this one does depends on the start."
+            "Outside the model: SqGathering is designed for one robot at a time, and here every robot moves in every round. Robots that see the same picture make the same move together, so the outcome depends on the start: some swarms gather, others fall into a pattern that repeats or stops. Rules made for all-at-once timing, such as walking to the centre of the smallest circle around the swarm, handle this case better."
                 .to_owned(),
         ),
         _ => {}
     }
     if config.multiplicity == MultiplicityModel::Local {
         notes.push(
-            "Outside the model: with only local detection a robot cannot tell which other points are stacks. A robot on a stack always stays; a robot alone walks to its nearest neighbour. So two stacks never merge."
+            "Outside the model: with local detection a robot knows whether its own spot is a stack, but it cannot recognise stacks anywhere else. A robot on a stack therefore always stays where it is, and a robot on its own walks to its nearest neighbour, so once two stacks exist they wait for each other forever and never merge. Switch Multiplicity detection to Weak to give the robots what SqGathering expects."
                 .to_owned(),
         );
     }
     if config.multiplicity == MultiplicityModel::None {
         notes.push(
-            "Outside the model: robots that cannot see stacks can never be sure to gather, even one at a time. Every robot walks to its nearest neighbour, and on two points the scheduler can move robots back and forth for ever."
+            "Outside the model: these robots cannot see stacks at all, so every occupied spot looks like a single robot. Each robot simply walks to its nearest neighbour, and once only two occupied spots are left the scheduler can keep sending robots back and forth between them forever. Gathering cannot be guaranteed this way, even one robot at a time; switch Multiplicity detection to Weak to see the algorithm as it is meant to run."
                 .to_owned(),
         );
     }
     if config.visibility_radius.is_some() {
         notes.push(
-            "Experimental: the rule is made for robots that see everyone; whether it gathers with limited sight is an open problem. Each robot applies the rule to the robots it can see."
+            "Experimental: SqGathering is designed for robots that see the whole swarm. Here each robot applies the same rule to the robots within its sight radius, which is a natural way to extend it, but nobody knows whether it always gathers this way: it may work, or it may split the swarm into groups that never find each other again. Watch the run to see which happens."
                 .to_owned(),
         );
     }
     if config.obstructed_visibility {
         notes.push(
-            "Experimental: the rule is made for robots that never hide one another; whether it gathers when they do is an open problem."
+            "Experimental: SqGathering is designed for robots that never hide one another. When robots block the view, a robot can miss a stack or a neighbour standing behind another robot and decide on an incomplete picture. Whether the rule still always gathers is not known, so treat this run as an experiment."
                 .to_owned(),
         );
     }

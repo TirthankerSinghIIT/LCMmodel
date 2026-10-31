@@ -119,7 +119,7 @@ fn two_robots(config: &SimConfig, name: &str) -> Result<(), ConfigError> {
         Ok(())
     } else {
         Err(ConfigError::Unsupported(format!(
-            "{name} is for exactly two robots (more need robots on one spot to merge into one): set Robots to 2"
+            "{name} is for exactly two robots: with more, robots that meet would have to recognise each other and merge into one, which these rules do not do. Set Robots to 2 (Settings → Robots → Swarm)."
         )))
     }
 }
@@ -151,10 +151,10 @@ pub fn plan_uniform(config: &SimConfig) -> Result<Plan, ConfigError> {
 pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = Vec::new();
     if !config.rigid_movement {
-        notes.push("Outside the model: the algorithm is made for robots that always reach the point they chose (rigid moves).".to_owned());
+        notes.push("Outside the model: these rules are designed for robots that always reach the point they chose. When a robot can be stopped on the way, its coin toss no longer has the effect the rules count on, so meeting may take much longer, or the two robots may keep missing each other.".to_owned());
     }
     if config.num_of_faults > 0 {
-        notes.push("Outside the model: the algorithm is made for robots that never fail and move at equal speeds (a delayed robot moves slower).".to_owned());
+        notes.push("Outside the model: these rules are designed for two robots that never fail and move at the same speed. A crashed, erratic or forgetful robot, or one slowed down by a delay fault, breaks the balance between the two robots that the coin tosses rely on.".to_owned());
     }
     notes
 }

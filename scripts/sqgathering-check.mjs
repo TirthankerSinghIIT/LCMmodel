@@ -133,8 +133,8 @@ check("simulator: the stacked start gathers too", await until("window.lcm.state 
 await js(`window.lcm.settings.set("unlimited_visibility", false)`);
 await js("document.getElementById('reset').click()");
 await sleep(400);
-check("simulator: limited visibility runs, with a note that it is an open problem",
-  await js("!document.getElementById('model_notes').hidden && /open problem/.test(document.getElementById('model_notes').textContent)"),
+check("simulator: limited visibility runs, with a note that it is untested ground",
+  await js("!document.getElementById('model_notes').hidden && /Untested ground/.test(document.getElementById('model_notes').textContent) && /nobody knows whether it always gathers/.test(document.getElementById('model_notes').textContent)"),
   await js("document.getElementById('model_notes').textContent"));
 await js(`window.lcm.settings.set("unlimited_visibility", true); window.lcm.settings.set("num_of_faults", 1)`);
 await sleep(300);

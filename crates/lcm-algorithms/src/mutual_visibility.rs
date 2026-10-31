@@ -123,16 +123,16 @@ pub fn plan(_: &SimConfig) -> Result<Plan, ConfigError> {
 #[must_use]
 pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = vec![
-        "The robots never stop: they keep making small moves, which keep everyone in sight once everyone sees everyone. Set a turn limit, or let the run stall when the moves get too small to make.".to_owned(),
+        "The robots never stop by themselves. Even once every robot sees every other one they keep making tiny adjustments, because a robot cannot be sure that nobody is still hidden, and those adjustments are chosen so that everybody stays in sight. The run ends when the moves become too small to make (shorter than ε), or at a turn limit if you set one.".to_owned(),
     ];
     if !config.obstructed_visibility {
-        notes.push("Turn on Settings → Visibility → Robots block the view: with transparent robots everyone sees everyone from the start.".to_owned());
+        notes.push("Turn on Settings → Model → Visibility → “Robots block the view” to see what this algorithm is for. With transparent robots every robot already sees every other one from the very start, so there is nothing for the algorithm to fix and the robots barely move.".to_owned());
     }
     if config.scheduler != SchedulerKind::Sequential {
-        notes.push("Outside the model: the algorithm is made for one robot at a time. With robots moving together they can land in line with each other.".to_owned());
+        notes.push("Outside the model: this algorithm is designed for one robot at a time. When several robots move together, two of them can end up in line with a third without either noticing, which hides robots from each other again; the run may take much longer, or stop with some robots still hidden.".to_owned());
     }
     if config.visibility_radius.is_some() {
-        notes.push("Outside the model: the algorithm is made for robots that see arbitrarily far (only other robots block the view).".to_owned());
+        notes.push("Outside the model: this algorithm is designed for robots that can see arbitrarily far, where only other robots block the view. With a limited sight radius, robots that are far apart never see each other however they move, so complete mutual visibility may be out of reach.".to_owned());
     }
     notes
 }

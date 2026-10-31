@@ -186,11 +186,11 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
         .map_or(config.num_of_robots as usize, Vec::len);
     if n != 2 {
         return refuse(
-            "Compass gathering (Izumi et al.) is for exactly two robots: set Robots to 2",
+            "Compass gathering is for exactly two robots: its rules decide what to do from where the one other robot lies by the robot's own compass. Set Robots to 2 (Settings → Robots → Swarm).",
         );
     }
     if config.num_of_faults > 0 {
-        return refuse("Compass gathering assumes no faulty robots: set Faulty robots to 0");
+        return refuse("Compass gathering is designed for two robots that never fail: with only two robots, a faulty one leaves nobody to gather with. Set Faulty robots to 0 (Settings → Model → Faults).");
     }
     let overlapping = matches!(
         config.scheduler,
@@ -222,7 +222,7 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
     let phi = config.compass_error;
     if config.frames != lcm_core::Frames::Compass {
         notes.push(
-            "The robots' compasses are exact here (Coordinate frames is not set to Compass), so the error is 0°.".to_owned(),
+            "The robots' compasses are exact in this run, because Coordinate frames is not set to “Compass with an error”. Both robots agree on north, so they gather easily; set the frames to Compass (Settings → Model → Robot model) to see how the rules cope with compasses that point the wrong way.".to_owned(),
         );
         return notes;
     }
@@ -231,36 +231,36 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
         SchedulerKind::Async | SchedulerKind::KAsync
     );
     let (name, bound, tight) = if config.compass_static {
-        ("The rules for a fixed compass", 90.0, true)
+        ("The rules for fixed compasses", 90.0, true)
     } else if overlapping {
         (
-            "The rules for a changing compass, robots acting on their own,",
+            "The rules for changing compasses, with robots acting on their own clocks,",
             30.0,
             false,
         )
     } else {
         (
-            "The rules for a changing compass, robots acting in rounds,",
+            "The rules for changing compasses, with robots acting in rounds,",
             45.0,
             true,
         )
     };
     if phi >= bound {
         notes.push(format!(
-            "Outside the model: {name} are sure to gather only while the compass error stays below {bound}°{}; this run allows {phi}°.",
+            "Outside the model: {name} only guarantee that the two robots meet while every compass error stays below {bound}°{}. This run allows errors of up to {phi}°, so the robots may circle each other for a very long time, or never meet.",
             if tight {
-                ", and no rules can do better"
+                ", and no rules can guarantee more than that"
             } else {
-                " (whether any rules can do better is open)"
+                "; whether some other rules could do better is not known"
             }
         ));
     } else {
         notes.push(format!(
-            "{name} are sure to gather while the compass error stays below {bound}°; this run allows {phi}°."
+            "{name} guarantee that the two robots meet as long as every compass error stays below {bound}°, and this run allows at most {phi}°, so they will meet. Close to that bound it can take a very long time, because each correction overshoots a little."
         ));
     }
     if overlapping {
-        notes.push("Acting on their own, the robots never stop once together: they stay put, but stopping could be wrong if the other were still moving, so the run goes on.".to_owned());
+        notes.push("With robots acting on their own clocks, the two robots never terminate, even after they have met: a robot cannot be sure that the other has finished moving, so stopping could be a mistake. They stay together, and the run goes on until a limit.".to_owned());
     }
     notes
 }

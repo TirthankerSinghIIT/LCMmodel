@@ -103,8 +103,8 @@ const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const SCHEDULER_WORDS = { async: "Async", sequential: "One at a time", ssync: "Some at once · SSYNC", fsync: "All at once · FSYNC", kasync: "k-ASYNC" };
 const MULTIPLICITY_WORDS = { none: "Can't see stacks", local: "Knows if its own spot is shared", weak: "Sees stacks", strong: "Counts stacks" };
 const NOTE_KINDS = [
-  [/^Outside the model:\s*/, "warn", "Outside its design"],
-  [/^Experimental:\s*/, "caution", "Experimental"],
+  [/^Outside the model:\s*/, "warn", "Outside what it was built for"],
+  [/^Experimental:\s*/, "caution", "Untested ground"],
   [/^(Approximation|Simplification):\s*/, "info", "Simplified"],
 ];
 /** The chips: [text, setting key or null]; a key the algorithm locks gets the lock. */
@@ -129,7 +129,8 @@ function renderBrief() {
   const locks = LOCKS[key] ?? {};
   const notes = brief.notes.map((text) => {
     const [re, kind, tag] = NOTE_KINDS.find(([r]) => r.test(text)) ?? [null, "info", ""];
-    return { kind, tag, text: re ? text.replace(re, "") : text };
+    const body = re ? text.replace(re, "") : text;
+    return { kind, tag, text: body.charAt(0).toUpperCase() + body.slice(1) }; // "Tag. Sentence", not "Tag. sentence"
   });
   const warns = notes.filter((x) => x.kind !== "info").length;
   el.classList.toggle("folded", !brief.open);
@@ -403,7 +404,7 @@ const EXAMPLES = {
       set: { ...SQ, custom: PAIR_AND_ONE, scheduler: "sequential", multiplicity: "none", rigid_movement: true, schedule_text: "0, 2, 1", schedule_repeat: "repeat", max_turns: 60 } },
     { label: "Same order, robots see stacks", note: "Now the single robot knows the pair is a stack and joins it",
       set: { ...SQ, custom: PAIR_AND_ONE, scheduler: "sequential", multiplicity: "weak", rigid_movement: true, schedule_text: "0, 2, 1", schedule_repeat: "repeat", max_turns: 60 } },
-    { label: "Limited visibility (open problem)", note: "Experimental: 30 robots that see only 120 units around them",
+    { label: "Limited visibility (untested ground)", note: "Experimental: 30 robots that see only 120 units around them; whether the rule always gathers like this is not known",
       set: { open_world: true, pattern: "cloud", num_of_robots: 30, spread: 90, scheduler: "sequential", turn_gap: "none", multiplicity: "weak", unlimited_visibility: false, visibility_radius: 120, rigid_movement: true, schedule_text: "" } },
   ],
   Gathering: [
@@ -587,18 +588,18 @@ const fmtSize = (v) => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v >= 1
 
 /* Playing a turn at a time: say, in plain words, whose turn it is and what the algorithm does. */
 const RULES = {
-  Gathering: "Each robot walks to the average position of the robots it sees, so the swarm closes in on its centre.",
-  SEC: "Each robot walks to the nearest point of the smallest circle around the robots it sees.",
-  GoToCenter: "Each robot heads for the centre of the smallest circle around the robots it sees, but never so far that it could lose sight of a neighbour.",
-  SqGathering: "One robot moves at a time. With one stack of robots, everyone joins it; with several, a robot on a stack steps halfway to its nearest neighbour while the others wait; with none, a robot walks to its nearest neighbour.",
-  Spreading: "Each robot walks to the centre of the area closer to it than to any other robot, so the swarm spreads out evenly.",
-  TwoTask: "Half the robots (red) close in on the smallest circle around the swarm, the other half (blue) on its centre.",
-  CircleFormation: "A robot off the circle around the swarm steps onto it; on it, a robot slides to halfway between its two neighbours, so the robots end up evenly spaced.",
-  CompassGathering: "Two robots whose compasses may point a little off north. Depending on where the other robot lies by its own compass, a robot walks onto it, steps west, swings around it, or waits.",
-  RandomizedGathering: "Two robots. At each look a robot tosses a coin: stay, go halfway, or go all the way to the other robot.",
-  RandomizedGatheringUniform: "Two robots. At each look a robot picks at random: go all the way to the other robot, halfway, or a random fraction of the way.",
-  MutualVisibility: "Robots in line hide each other. Each robot makes small sideways moves, never landing in line with two others, until every robot sees every other.",
-  CrashGathering: "Robots gather even if some stop working for good. Each heads for the stack (before there is one, the centre of the smallest circle around everyone), curving around robots in its way.",
+  Gathering: "Every time a robot looks, it walks to the average position of all the robots it can see, its centre of gravity. Because everybody aims at nearly the same middle point, the swarm keeps shrinking towards its centre, quickly at first and then more and more slowly; a robot terminates once every robot it sees is within ε of that middle.",
+  SEC: "Every time a robot looks, it finds the smallest circle that encloses all the robots it can see and walks to the nearest point on that circle. Robots inside the circle move out to its edge, robots already on it stay, and the run ends when every robot sits on the circle.",
+  GoToCenter: "Every time a robot looks, it heads for the centre of the smallest circle around the robots it can see, but it only goes as far as it can without losing sight of any of its neighbours. Groups that can see each other therefore stay connected while they shrink, and with limited sight the swarm closes in without falling apart.",
+  SqGathering: "One robot moves at a time, and robots can tell a stack (several robots on one spot) from a single robot. If there is exactly one stack, every robot walks to it and robots already on it stay. If there are several stacks, a robot on a stack steps halfway towards its nearest neighbour, breaking the tie, while robots on their own wait. If there is no stack yet, a robot walks onto its nearest neighbour to create the first one.",
+  Spreading: "Every time a robot looks, it walks to the centre of the area that is closer to it than to any other robot (its Voronoi cell). Crowded robots have small cells and move apart, lonely robots have large ones, so the swarm spreads out until the robots cover the space evenly.",
+  TwoTask: "The swarm is split into two teams that want different things. Red robots run the smallest-enclosing-circle rule and walk to the edge of the circle around the swarm; blue robots run the centre-of-gravity rule and walk to its middle. Watching them pull against each other shows how two algorithms interact in one swarm.",
+  CircleFormation: "A robot that is not on the circle around the swarm first steps onto it. A robot already on the circle slides along it to the point halfway between its two neighbours. Repeated over and over, these small corrections spread the robots out until they stand evenly spaced around the circle.",
+  CompassGathering: "Two robots whose compasses may point a little away from true north. Each robot looks at where the other one lies according to its own compass and, depending on that direction, walks straight onto it, steps west, swings around it, or waits. The rules are chosen so that the two robots meet as long as the compass errors stay below a known bound.",
+  RandomizedGathering: "Two robots that look exactly alike. Every time a robot looks it tosses a coin and either stays where it is, goes halfway towards the other robot, or goes all the way to it. Randomness is what breaks the symmetry: sooner or later one robot moves while the other stays, and they meet.",
+  RandomizedGatheringUniform: "Two robots that look exactly alike. Every time a robot looks it picks at random to go all the way to the other robot, halfway, or a random fraction of the way. Because the two robots almost never choose the same move, the distance between them keeps shrinking until they meet.",
+  MutualVisibility: "Robots that stand in line hide each other. Every time a robot looks, it makes a small sideways move chosen so that it never lands in line with two other robots, which gradually uncovers robots that were hidden. The goal is a position in which every robot can see every other robot.",
+  CrashGathering: "Robots gather on one spot even though some of them may stop working for good (crash). Each working robot heads for the stack where robots are already gathering or, before there is one, for the centre of the smallest circle around everyone, and curves around any robot standing in its way. Crashed robots simply stay where they are.",
 };
 const fmtNumber = (v) => (v === 0 ? "0" : v >= 1e-3 ? String(+v.toPrecision(3)) : v.toExponential(2));
 let endNote = null;   // "ended", "stalled" or null: which note is up

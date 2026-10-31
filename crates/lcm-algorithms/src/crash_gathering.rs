@@ -258,7 +258,7 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
         SchedulerKind::Async | SchedulerKind::KAsync
     ) {
         return Err(ConfigError::Unsupported(
-            "Gathering despite crashes works in rounds: pick Sequential, SSYNC or FSYNC as the scheduler".to_owned(),
+            "Gathering despite crashes works in rounds: pick Sequential, SSYNC or FSYNC as the scheduler (Settings → Timing → Scheduler). It needs every robot that acts to see the swarm at the same moment, which robots on their own clocks cannot guarantee.".to_owned(),
         ));
     }
     if matches!(
@@ -266,7 +266,7 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
         MultiplicityModel::None | MultiplicityModel::Local
     ) {
         return Err(ConfigError::Unsupported(
-            "Crash-tolerant gathering needs weak (or strong) multiplicity detection".to_owned(),
+            "Gathering despite crashes needs robots that can see stacks: set Multiplicity detection to Weak or Strong (Settings → Model → Robot model). The working robots find each other by heading for the stack, so they must be able to tell a stack from a single robot.".to_owned(),
         ));
     }
     Ok(Plan::single(Box::new(CrashGathering)))
@@ -274,16 +274,16 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
 
 #[must_use]
 pub fn notes(config: &SimConfig) -> Vec<String> {
-    let mut notes = vec!["Simplification: a robot whose straight path is blocked curves around the robot in its way in one straight sideways step, then goes straight on.".to_owned()];
+    let mut notes = vec!["Simplification: when another robot stands on a robot's straight path to its target, the exact rule makes it curve around that robot. Here the curve is replaced by one short sideways step, after which the robot goes straight on: it gets past in the same way, only along a less smooth path.".to_owned()];
     if config.num_of_faults > 0 && config.fault_type != lcm_core::FaultSelection::Crash {
-        notes.push("Outside the model: the algorithm tolerates robots that stop for good (crash faults) only.".to_owned());
+        notes.push("Outside the model: this algorithm tolerates robots that stop working for good (crash faults): it simply gathers the working robots and walks around the crashed ones. Byzantine, omission and delay faults behave differently, and they can mislead the working robots or keep them waiting.".to_owned());
     }
     if config.multiplicities > 1 {
-        notes.push("Outside the model: a start with two or more stacks cannot be gathered by any algorithm when robots act in rounds.".to_owned());
+        notes.push("Outside the model: this run starts with two or more stacks. When robots act in rounds, the robots of a stack can all move together every time, so a stack may never split, and two such stacks can then never be merged by any rule: this start cannot always be gathered.".to_owned());
     }
     if config.visibility_radius.is_some() {
         notes.push(
-            "Outside the model: the algorithm is made for robots that see everyone.".to_owned(),
+            "Outside the model: this algorithm is designed for robots that see the whole swarm. With a limited sight radius, robots may head for different stacks or different centres and never meet.".to_owned(),
         );
     }
     notes

@@ -441,7 +441,7 @@ fn settings_outside_the_model_are_refused() {
         ..base.clone()
     };
     assert!(lcm_algorithms::simulation(&limited).is_ok());
-    assert!(sq_gathering::notes(&limited)[0].contains("open problem"));
+    assert!(sq_gathering::notes(&limited)[0].starts_with("Experimental:"));
     let ssync = SimConfig {
         scheduler: SchedulerKind::Ssync,
         schedule: None,
