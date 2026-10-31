@@ -675,7 +675,7 @@ flowchart TD
 
 - The average includes crashed robots, but the termination test ignores them: the original's behaviour, kept on purpose (finding #4 in report.md).
 - The sum is a plain left-to-right loop, as in the Python, so results match to the last digits.
-- Only guaranteed to gather with unlimited visibility. With a limited radius the swarm can stop in several separate groups, all marked terminated: a robot that sees nobody terminates (the original's rule, chart 2), and moving to the average can break visibility links. Algorithms built for limited visibility, such as Go-To-Center (Ando et al.), limit the step length to keep them.
+- Only guaranteed to gather with unlimited visibility. With a limited radius the swarm can stop in several separate groups, all marked terminated: a robot that sees nobody terminates (the original's rule, chart 2), and moving to the average can break visibility links. Algorithms built for limited visibility, such as Go-To-Center, limit the step length to keep them.
 
 | Step | What happens |
 | --- | --- |
@@ -1433,7 +1433,7 @@ draw(ctx = this.ctx, dpr = this.dpr) {
 
 ## 5. The sequential scheduler
 
-Under the sequential scheduler only one robot's Look is ever waiting in the queue. When its turn ends, next_turn() decides who goes next, and the others stay still until then. This is the sequential scheduler of Section 2.2 of "Universal pattern formation by oblivious robots under sequential schedulers" (arXiv:2412.10733); it is new in the Rust core, not in the Python original.
+Under the sequential scheduler only one robot's Look is ever waiting in the queue. When its turn ends, next_turn() decides who goes next, and the others stay still until then. Every robot gets exactly one turn per epoch, and a turn runs Look, Compute and Move to the end before anyone else acts. It is new in the Rust core, not in the Python original.
 
 ```mermaid
 flowchart TD
@@ -1488,11 +1488,11 @@ flowchart TD
     t_arr -- "next turn" --> t_end
 ```
 
-- Round-robin and the shuffle each epoch both give every robot that is still active exactly one turn per epoch. An explicit list of turns ends its epoch once every robot has had at least one, as in the paper.
-- Crashed and terminated robots are skipped. The paper has no crashes; this is the simulator's own rule.
-- Stalled is not in the paper either. Robots are deterministic and remember nothing, so if a whole epoch changes nothing, every later epoch is the same and the run can never end. It is not checked with faults, because an omission fault skips moves at random.
+- Round-robin and the shuffle each epoch both give every robot that is still active exactly one turn per epoch. An explicit list of turns ends its epoch once every robot has had at least one.
+- Crashed and terminated robots are skipped, so a crash never blocks the turns of the others; this is the simulator's own rule.
+- Stalled is the simulator's own stop too. Robots are deterministic and remember nothing, so if a whole epoch changes nothing, every later epoch is the same and the run can never end. It is not checked with faults, because an omission fault skips moves at random.
 - A run can also end at a turn limit (max_turns): the last turn's move still finishes. It says nothing about the algorithm, only that the budget ran out.
-- With non-rigid movement, a robot whose destination is within δ always arrives; otherwise the adversary stops it somewhere at least δ along its way. δ is not shown to the algorithms: in the paper, the robots do not know it.
+- With non-rigid movement, a robot whose destination is within δ always arrives; otherwise the adversary stops it somewhere at least δ along its way. δ is not shown to the algorithms: the robots do not know it.
 
 | Step | What happens |
 | --- | --- |

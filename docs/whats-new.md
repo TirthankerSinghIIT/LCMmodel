@@ -44,13 +44,18 @@ paper's model.
 | **Scenarios** | Export menu: save, open, or copy a link that opens the exact scenario |
 | **Trails, pulses, halo** | `P` toggles trails; Looks pulse, the robot about to act has a halo, targets are marked |
 | **Phone and tablet** | The layout adapts to phone and tablet widths (checked by `responsive-check.mjs`) |
+| **Info cards** | The ⓘ next to a setting (scheduler, multiplicity, frames, visibility, faults, δ, …) opens a card that explains in plain words what the choice means for the robots and when to pick it; it opens by itself when you change the setting (switch off in the card). The multiplicity card says what the selected algorithm needs |
+| **Settings arrangement** | Options that only matter for one choice sit indented under it and appear with a short animation; the Timing tab starts with one sentence saying how the chosen scheduler runs; λ, sampling rate and precision are grouped under *Clock and precision* |
+| **Notes** | The algorithm brief's notes are rewritten as full explanations, tagged *Outside what it was built for*, *Untested ground* or *Simplified*; new notes slide in when a setting changes |
+| **Ring page** | A card says whose turn it is, what that robot sees and where it will step; a bar shows rounds used against the most needed; the gaps are listed; *How the robots decide* explains the rules; the next robot has a halo and the step arrow draws itself |
 
 ## Checks (GitHub Actions on every push to the fork)
 
 `cargo test --workspace`; native = Wasm bit for bit (`check-wasm-parity.mjs`); flowcharts match the
 code; headless Chrome on every page: `ui-check.mjs`, `responsive-check.mjs`, `sqgathering-check.mjs`,
-`docs-check.mjs`, and `extras-check.mjs` (the ring page, every Advanced-gathering and Mutual-visibility
-example, the inspector).
+`docs-check.mjs`, `info-check.mjs` (every setting has an info card), `embed-check.mjs`, and
+`extras-check.mjs` (the ring page, every Advanced-gathering and Mutual-visibility example, the
+inspector); every algorithm under every scheduler, rigid and not (`scheduler-matrix.mjs`).
 
 ## Known limits
 

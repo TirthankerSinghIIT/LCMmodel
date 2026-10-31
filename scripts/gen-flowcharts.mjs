@@ -288,7 +288,7 @@ const CHARTS = [
             "Only guaranteed to gather with unlimited visibility. With a limited radius the swarm can stop " +
             "in several separate groups, all marked terminated: a robot that sees nobody terminates (the " +
             "original's rule, chart 2), and moving to the average can break visibility links. Algorithms " +
-            "built for limited visibility, such as Go-To-Center (Ando et al.), limit the step length to keep them.",
+            "built for limited visibility, such as Go-To-Center, limit the step length to keep them.",
         ],
         "lanes": ["rows", [["Target", 0, 1], ["Termination", 2, 3]]],
         "nodes": [
@@ -365,24 +365,23 @@ const CHARTS = [
         "blurb": (
             "Under the sequential scheduler only one robot's Look is ever waiting in the queue. When " +
             "its turn ends, next_turn() decides who goes next, and the others stay still until then. " +
-            "This is the sequential scheduler of Section 2.2 of \"Universal pattern formation by " +
-            "oblivious robots under sequential schedulers\" (arXiv:2412.10733); it is new in the " +
-            "Rust core, not in the Python original."
+            "Every robot gets exactly one turn per epoch, and a turn runs Look, Compute and Move " +
+            "to the end before anyone else acts. It is new in the Rust core, not in the Python original."
         ),
         "notes": [
             "Round-robin and the shuffle each epoch both give every robot that is still active " +
             "exactly one turn per epoch. An explicit list of turns ends its epoch once every robot " +
-            "has had at least one, as in the paper.",
-            "Crashed and terminated robots are skipped. The paper has no crashes; this is the " +
-            "simulator's own rule.",
-            "Stalled is not in the paper either. Robots are deterministic and remember nothing, so " +
+            "has had at least one.",
+            "Crashed and terminated robots are skipped, so a crash never blocks the turns of the " +
+            "others; this is the simulator's own rule.",
+            "Stalled is the simulator's own stop too. Robots are deterministic and remember nothing, so " +
             "if a whole epoch changes nothing, every later epoch is the same and the run can never " +
             "end. It is not checked with faults, because an omission fault skips moves at random.",
             "A run can also end at a turn limit (max_turns): the last turn's move still finishes. It " +
             "says nothing about the algorithm, only that the budget ran out.",
             "With non-rigid movement, a robot whose destination is within δ always arrives; " +
             "otherwise the adversary stops it somewhere at least δ along its way. δ is not shown to the " +
-            "algorithms: in the paper, the robots do not know it.",
+            "algorithms: the robots do not know it.",
         ],
         "lanes": ["rows", [["A turn ends", 0, 3], ["Who goes next", 4, 6], ["The turn", 7, 9]]],
         "nodes": [

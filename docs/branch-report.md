@@ -9,6 +9,9 @@ Work on the fork `TirthankerSinghIIT/LCMmodel`, built on the sequential schedule
 > `main` without conflicts. Checked on it: 229 Rust tests, 0 clippy warnings, browser = native bit
 > for bit (50 cases), every algorithm under every scheduler rigid and not (120 runs, no crash; see
 > `scripts/scheduler-matrix.mjs`), and the page checks. The older branches are kept only as history.
+> On top of that, `combined` adds an info card for every setting, notes rewritten in full sentences,
+> nested sub-options with a one-line summary of the timing, and a fuller ring page (see
+> [whats-new](whats-new.md), *On the page*).
 
 ## In one paragraph
 
