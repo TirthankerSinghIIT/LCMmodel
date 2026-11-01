@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCM Simulator</title>
+  <meta name="description" content="Look-Compute-Move robot swarm simulator running a Rust core in your browser.">
+  <script>
+    // Theme before first paint: "system" (default), "light" or "dark".
+    (() => {
+      let t = "system";
+      try { t = localStorage.getItem("lcm-theme") || "system"; } catch {}
+      if (t !== "system") document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="stylesheet" href="web/styles.css">
+</head>
+<body>
+  <div id="stage"><canvas id="canvas" aria-label="Simulation view"></canvas></div>
+
+  <!-- Toolbar -->
+  <div id="toolbar" class="panel keep" role="toolbar" aria-label="Simulation controls">
+    <div class="brand"><span data-icon="logo" data-size="20"></span><span>LCM</span></div>
+    <select id="algorithm" aria-label="Algorithm" title="Algorithm"></select>
+    <button id="examples" class="btn" title="Ready-made setups for this algorithm" aria-label="Examples" aria-haspopup="menu" aria-expanded="false" aria-controls="examples_menu" hidden><span data-icon="list"></span><span class="label">Examples</span></button>
+    <button id="edit" class="btn" aria-pressed="false" title="Scenario editor: place, move, stack and remove robots by hand (D)" aria-label="Scenario editor"><span data-icon="pencil"></span></button>
+    <button id="adversary" class="btn" aria-pressed="false" title="Play the adversary: choose who moves next, and where it stops (A). Sequential or SSYNC scheduler" aria-label="Play the adversary"><span data-icon="hand"></span></button>
+    <div class="divider"></div>
+    <button id="play" class="btn primary" title="Play (Space)" aria-label="Play"><span data-icon="play"></span><span class="label">Play</span></button>
+    <button id="step_event" class="btn" title="Step one event (→)" aria-label="Step one event"><span data-icon="stepEvent"></span></button>
+    <button id="step_time" class="btn" title="Step one time unit (Shift + →)" aria-label="Step one time unit"><span data-icon="stepTime"></span></button>
+    <button id="reset" class="btn" title="Reset with current settings (R)" aria-label="Reset"><span data-icon="reset"></span><span class="label">Reset</span></button>
+    <select id="playback" aria-label="Playback speed" title="Simulated time per second">
+      <option value="1">1×</option>
+      <option value="5">5×</option>
+      <option value="20" selected>20×</option>
+      <option value="100">100×</option>
+      <option value="Infinity">Max</option>
+    </select>
+    <div class="divider"></div>
+    <button id="toggle_settings" class="btn" aria-pressed="true" title="Settings (S)" aria-label="Settings"><span data-icon="sliders"></span></button>
+    <div class="divider"></div>
+    <a id="docs_link" class="btn" href="web/docs.html" title="How it works: interactive flowcharts of the simulator"><span data-icon="book"></span><span class="label">How it works</span></a>
+  </div>
+
+  <!-- Settings -->
+  <section id="settings" class="panel" aria-label="Settings">
+    <div class="panel-head">
+      <h2>Settings</h2>
+      <span class="spacer"></span>
+      <span id="dirty" class="badge warn" hidden title="The running simulation still uses the old settings">Reset to apply</span>
+      <button id="close_settings" class="btn small sheet-close" type="button" title="Close settings" aria-label="Close settings"><span data-icon="close" data-size="15"></span></button>
+    </div>
+    <div id="settings_body" class="panel-body"></div>
+    <div class="panel-foot">
+      <span>Changes restart a new run.</span>
+      <button id="defaults" class="btn small outline">Defaults</button>
+    </div>
+  </section>
+
+  <!-- HUD -->
+  <section id="hud" class="panel" aria-label="Simulation status" aria-live="polite">
+    <div class="hud-row"><span class="k">Time</span><span id="hud_status" class="hud-status">Loading…</span></div>
+    <div id="hud_time" class="hud-time">0.00</div>
+    <div class="hud-row"><span class="k">Terminated</span><span class="v" id="hud_term">0 / 0</span></div>
+    <div class="progress" aria-hidden="true"><div id="hud_bar"></div></div>
+    <div class="hud-plot hud-extra"><div class="hud-row"><span class="k" title="How far the farthest robot is from the middle of the swarm, as the robots take their moves (logarithmic): it falls as the swarm gathers">Swarm size</span><span class="v" id="hud_spread">—</span></div><canvas id="hud_plot" width="440" height="110" aria-label="Swarm size over time"></canvas></div>
+    <div class="hud-row hud-extra"><span class="k" title="How long the bar is in the simulation's own units. Zoom in, or follow the swarm, and it shrinks with it">Scale</span><span class="v scale"><span id="hud_scale_bar" aria-hidden="true"></span><span id="hud_scale">—</span></span></div>
+    <div class="hud-row hud-extra"><span class="k" title="How far the view is zoomed in compared with the whole world (k = thousand, M = million, B = billion, T = trillion). The gauge is logarithmic: each mark is a thousand times closer">Zoom</span><span class="v zoomgauge"><button id="hud_zoom_out" class="btn zoombtn" title="Zoom out (−)" aria-label="Zoom out"><span data-icon="minus" data-size="12"></span></button><span id="hud_zoom_meter" aria-hidden="true"><i id="hud_zoom_fill"></i></span><button id="hud_zoom_in" class="btn zoombtn" title="Zoom in (+)" aria-label="Zoom in"><span data-icon="plus" data-size="12"></span></button><span id="hud_zoom">1×</span></span></div>
+    <div class="hud-row hud-extra"><span class="k" title="The distance between two labelled grid lines">Grid lines</span><span class="v" id="hud_grid">—</span></div>
+    <div class="hud-row hud-extra" id="hud_epochs_row" hidden><span class="k" title="Turns: one robot does a whole Look-Compute-Move per turn. Epochs: rounds in which every robot still moving has had its turn">Turns · epochs</span><span class="v"><span id="hud_turns">0</span> · <span id="hud_epochs">0</span></span></div>
+    <div class="hud-row hud-extra"><span class="k" title="What the robots did: each Look and each arrival">Robot events</span><span class="v" id="hud_events">0</span></div>
+    <div class="hud-row hud-extra"><span class="k" title="Visualize ticks, one every sampling interval. They belong to no robot">Ticks</span><span class="v" id="hud_ticks">0</span></div>
+    <div class="hud-row hud-extra"><span class="k" title="Robot events and ticks together">Events / s</span><span class="v" id="hud_rate">—</span></div>
+    <div id="hud_last" class="last-event hud-extra" hidden></div>
+    <div id="hud_perf" class="hud-perf hud-extra">—</div>
+  </section>
+
+  <!-- Inspector -->
+  <section id="inspector" class="panel" hidden aria-label="Selected robot">
+    <h3><span data-field="title">Robot</span><span data-field="status"></span><span class="spacer"></span>
+      <button class="btn small" data-action="center" title="Center view on this robot" aria-label="Center view"><span data-icon="target" data-size="15"></span></button>
+      <button class="btn small" data-action="close" title="Close (Esc)" aria-label="Close"><span data-icon="close" data-size="15"></span></button>
+    </h3>
+    <dl></dl>
+    <p class="why" data-field="why" hidden></p>
+  </section>
+
+  <!-- Legend -->
+  <div id="legend" class="panel" aria-label="Legend"></div>
+
+  <!-- View tools -->
+  <div id="tools" class="panel" role="toolbar" aria-label="View">
+    <!-- Zoom + and − live in the status panel's Zoom row; these two show on phones only, where that row is hidden. -->
+    <button id="zoom_in" class="btn" title="Zoom in (+)" aria-label="Zoom in"><span data-icon="plus"></span></button>
+    <button id="zoom_out" class="btn" title="Zoom out (−)" aria-label="Zoom out"><span data-icon="minus"></span></button>
+    <button id="follow" class="btn" aria-pressed="false" title="Follow the swarm: zoom in as it shrinks (Z)" aria-label="Follow the swarm"><span data-icon="follow"></span></button>
+    <button id="fit" class="btn" title="Fit the world in view (F)" aria-label="Fit the world in view"><span data-icon="fit"></span></button>
+    <button id="grid" class="btn" aria-pressed="true" title="Grid: shows the scale as you zoom (G)" aria-label="Show a grid"><span data-icon="grid"></span></button>
+    <button id="trails" class="btn" aria-pressed="true" title="Motion trails: each robot's recent path (P)" aria-label="Motion trails"><span data-icon="trail"></span></button>
+    <button id="measure" class="btn" aria-pressed="false" title="Measure a distance: click a point or a robot, then a second one (M)" aria-label="Measure a distance"><span data-icon="ruler"></span></button>
+    <button id="links" class="btn" aria-pressed="false" title="Show who sees whom: a line between robots that can see each other, orange when nearly out of sight (V). Only for a limited sight radius" aria-label="Show who sees whom" hidden><span data-icon="links"></span></button>
+    <button id="export" class="btn" title="Export and share" aria-label="Export and share" aria-haspopup="menu"><span data-icon="download"></span></button>
+    <button id="fullscreen" class="btn" title="Full screen (Shift + F)" aria-label="Full screen" aria-pressed="false"><span data-icon="fullscreen"></span></button>
+    <button id="theme" class="btn" title="Theme (T)" aria-label="Theme"><span data-icon="moon"></span></button>
+    <button id="help" class="btn" title="Help: keyboard shortcuts (?)" aria-label="Help: keyboard shortcuts"><span data-icon="help"></span></button>
+  </div>
+
+  <div id="overview" class="panel" aria-label="Overview map: the whole starting area, with a rectangle for the part you are looking at"><canvas id="overview_canvas"></canvas></div>
+
+  <div id="turn_caption" class="panel" role="status" aria-live="polite" hidden></div>
+  <div id="adversary_panel" class="panel side-panel" aria-label="Play the adversary" hidden></div>
+  <div id="editor_panel" class="panel side-panel" aria-label="Scenario editor" hidden></div>
+  <div id="model_notes" class="panel" role="note" hidden></div>
+
+  <div id="export_menu" class="panel menu" role="menu" hidden>
+    <button class="btn" role="menuitem" data-export="png"><span data-icon="image"></span>Image of the view (PNG)</button>
+    <button class="btn" role="menuitem" data-export="csv"><span data-icon="table"></span>Robot data (CSV)</button>
+    <button class="btn" role="menuitem" data-export="link"><span data-icon="chain"></span>Copy link to this case</button>
+    <button class="btn" role="menuitem" data-export="embed"><span data-icon="code"></span>Embed in a web page…</button>
+    <button class="btn" role="menuitem" data-export="scenario"><span data-icon="download"></span>Save the scenario (JSON)</button>
+    <button class="btn" role="menuitem" data-export="open"><span data-icon="list"></span>Open a scenario file…</button>
+  </div>
+  <input id="scenario_file" type="file" accept=".json,application/json" hidden>
+
+  <div id="examples_menu" class="panel menu" role="menu" aria-label="Examples" hidden></div>
+
+  <div id="tip" hidden></div>
+  <div id="toast" hidden role="status"></div>
+
+  <div id="loading" class="overlay plain">
+    <div class="panel dialog"><div class="loading"><span class="spinner"></span><span id="loading_text">Starting the Rust core…</span></div></div>
+  </div>
+
+  <div id="shortcuts" class="overlay" hidden>
+    <div class="panel dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts_title">
+      <button class="btn small close" data-action="close" aria-label="Close"><span data-icon="close" data-size="15"></span></button>
+      <h2 id="shortcuts_title">Keyboard shortcuts</h2>
+      <div class="keys">
+        <span class="combo"><kbd>Space</kbd></span><span>Play / pause</span>
+        <span class="combo"><kbd>→</kbd></span><span>Step one event</span>
+        <span class="combo"><kbd>Shift + →</kbd></span><span>Step one unit of simulated time</span>
+        <span class="combo"><kbd>R</kbd></span><span>Reset with the current settings</span>
+        <span class="combo"><kbd>F</kbd></span><span>Fit the world in view</span>
+        <span class="combo"><kbd>M</kbd></span><span>Measure: click a point or a robot, then a second one (Esc clears)</span>
+        <span class="combo"><kbd>O</kbd></span><span>Show or hide the overview map (click it to move the view)</span>
+        <span class="combo"><kbd>G</kbd></span><span>Show or hide the grid (it shows the scale as you zoom)</span>
+        <span class="combo"><kbd>Z</kbd></span><span>Follow the swarm: zoom in as it shrinks</span>
+        <span class="combo"><kbd>Shift + F</kbd></span><span>Full screen on / off</span>
+        <span class="combo"><kbd>+</kbd> / <kbd>−</kbd></span><span>Zoom in / out (or scroll)</span>
+        <span class="combo"><kbd>Drag</kbd></span><span>Pan · click a robot to inspect it</span>
+        <span class="combo"><kbd>V</kbd></span><span>Show who sees whom (limited visibility)</span>
+        <span class="combo"><kbd>P</kbd></span><span>Motion trails (paths) on / off</span>
+        <span class="combo"><kbd>D</kbd></span><span>Scenario editor: click to add, drag to move, Shift + click to stack, Alt + click to remove</span>
+        <span class="combo"><kbd>A</kbd></span><span>Play the adversary: click a robot, then Enter (or click its path to stop it)</span>
+        <span class="combo"><kbd>S</kbd></span><span>Show / hide settings</span>
+        <span class="combo"><kbd>H</kbd></span><span>Hide panels (clean view)</span>
+        <span class="combo"><kbd>E</kbd> / <kbd>Shift + E</kbd></span><span>Export PNG / CSV</span>
+        <span class="combo"><kbd>T</kbd></span><span>Theme: system → light → dark</span>
+        <span class="combo"><kbd>Esc</kbd></span><span>Deselect / close</span>
+        <span class="combo"><kbd>?</kbd></span><span>This help</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="web/app.js"></script>
+</body>
+</html>
