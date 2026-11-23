@@ -10,6 +10,10 @@
 //!   1/3. Against an oblivious adversary whose wait-plus-compute time per
 //!   cycle exceeds some τ > 0, the expected number of Looks is at most
 //!   18 (log2(δ/τ) + 1).
+//!   The simulator does not meet that hypothesis: async waits are
+//!   exponential draws with no positive lower bound and Compute takes no
+//!   time, so the bound is not claimed (`notes` says so; the tests only
+//!   check that average counts stay within it).
 //! - **Theorem 3**: λ = 1, λ = 1/2, or λ uniform in (0, 1), each with
 //!   probability 1/3: gathering with positive probability when computing
 //!   takes no time.
@@ -146,15 +150,20 @@ pub fn plan_uniform(config: &SimConfig) -> Result<Plan, ConfigError> {
     })))
 }
 
-/// Where the settings leave the paper's model.
+/// Where the settings leave the paper's model, one sentence each.
 #[must_use]
 pub fn notes(config: &SimConfig) -> Vec<String> {
-    let mut notes = Vec::new();
+    let mut notes = vec![
+        "Theorem 12's bound on the expected number of Looks assumes every wait plus compute takes more than some fixed τ > 0; the simulator's waits can be arbitrarily short, so the robots gather but that bound is not guaranteed here.".to_owned(),
+    ];
     if !config.rigid_movement {
-        notes.push("Outside the model: these rules are designed for robots that always reach the point they chose. When a robot can be stopped on the way, its coin toss no longer has the effect the rules count on, so meeting may take much longer, or the two robots may keep missing each other.".to_owned());
+        notes.push("Outside the model: the paper's robots always reach the point they chose, and a robot stopped on the way undoes the effect of its coin toss.".to_owned());
     }
     if config.num_of_faults > 0 {
-        notes.push("Outside the model: these rules are designed for two robots that never fail and move at the same speed. A crashed, erratic or forgetful robot, or one slowed down by a delay fault, breaks the balance between the two robots that the coin tosses rely on.".to_owned());
+        notes.push(
+            "Outside the model: the paper's two robots never fail and move at the same speed."
+                .to_owned(),
+        );
     }
     notes
 }
