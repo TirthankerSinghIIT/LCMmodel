@@ -16,22 +16,40 @@
 //! The paper leaves "a small amount" open. Here the robot moves along the
 //! middle of the widest angle between the directions to the robots it sees
 //! (so it leaves every line through itself and another robot), by half its
-//! distance to the band of width ε around the nearest line through two other
-//! visible robots (the core counts a robot that close as blocking; a band it
-//! stands in it only leaves), and never more than a quarter of the way to
-//! its nearest neighbour. The directions and their opposites make a set
+//! distance to the band of half-width `w = max(robot_radius, ε)` around the
+//! nearest line through two other visible robots (the core counts a robot
+//! that close to a segment as blocking it, docs/core-schema.md §2,
+//! `robot_radius`), and never more than a quarter of the way to its nearest
+//! neighbour. With fat robots a band of ε let the step end within the
+//! robot's radius of a line, hiding two robots from each other (review of
+//! #17, fix B5). The robots' radius reaches the algorithm in units of ε, the
+//! one length every robot knows in its own unit.
+//!
+//! **Fat robots, known gap.** The paper's robots are points, for which
+//! keeping off every line through two others is enough. A robot of radius r
+//! also hides the robot behind it from a robot whose line of sight passes
+//! within r of it: when robot k stands between the mover and robot j, k is
+//! closer to the line from the mover to j than the mover is to the line
+//! through k and j (by similar triangles), so the band above does not keep
+//! k out of the mover's new line of sight to j. A random check finds such
+//! moves; avoiding them would need a cone behind each robot, not a band, and
+//! is not done here (`notes` says so when `robot_radius` > 0). The directions and their opposites make a set
 //! symmetric under a half turn, so the widest gap always has a twin pointing
 //! the other way; the first in the robot's own angular order is taken, so the
 //! heading depends on its frame (any small move is allowed by the paper).
 
 use core::f64::consts::PI;
+use lcm_core::pyfloat::pow10_neg;
 use lcm_core::{
     Algorithm, ConfigError, Decision, Look, OverlayUpdate, Plan, Point, Rng, SchedulerKind,
     Scratch, SimConfig,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct MutualVisibility;
+pub struct MutualVisibility {
+    /// The robots' radius in units of ε (`robot_radius / ε`).
+    pub radius: f64,
+}
 
 /// Distance from `o` to the line through `a` and `b`.
 fn line_distance(o: Point, a: Point, b: Point) -> f64 {
@@ -43,9 +61,10 @@ fn line_distance(o: Point, a: Point, b: Point) -> f64 {
     ((o.x - a.x) * dy - (o.y - a.y) * dx).abs() / len
 }
 
-/// The step a robot at `me` takes among the visible `others`.
+/// The step a robot at `me` takes among the visible `others`, keeping out of
+/// the band of half-width `w` around every line through two of them.
 #[must_use]
-pub fn step(me: Point, others: &[Point], eps: f64) -> Point {
+pub fn step(me: Point, others: &[Point], w: f64) -> Point {
     if others.is_empty() {
         return me;
     }
@@ -74,13 +93,16 @@ pub fn step(me: Point, others: &[Point], eps: f64) -> Point {
     for (k, &a) in others.iter().enumerate() {
         room = room.min(libm::hypot(a.x - me.x, a.y - me.y) / 4.0);
         for &b in &others[k + 1..] {
-            // The core counts a robot within ε of a segment as blocking it,
-            // so each line is a band of width ε. A band the robot already
-            // stands in (it blocks those two) it only leaves: the heading is
-            // never along it. Any other it must not enter.
+            // The core counts a robot within w of a segment as blocking it,
+            // so each line is a band of half-width w, which the step must
+            // not enter. A band the robot already stands in sets no limit:
+            // the heading is never exactly along its line, so the robot
+            // drifts out of it, but it can move some way inside it. That
+            // only hides a and b if the robot stands between them, and then
+            // it already hides them.
             let d = line_distance(me, a, b);
-            if d > eps {
-                room = room.min((d - eps) / 2.0);
+            if d > w {
+                room = room.min((d - w) / 2.0);
             }
         }
     }
@@ -106,7 +128,7 @@ impl Algorithm for MutualVisibility {
                 .map(|k| view.pos[k]),
         );
         Decision {
-            target: step(me, others, look.model.eps),
+            target: step(me, others, look.model.eps * self.radius.max(1.0)),
             terminate: false,
             overlay: OverlayUpdate::Keep,
         }
@@ -116,23 +138,29 @@ impl Algorithm for MutualVisibility {
 /// # Errors
 /// Never; the model notes say where a run leaves the paper's setting.
 #[allow(clippy::unnecessary_wraps)]
-pub fn plan(_: &SimConfig) -> Result<Plan, ConfigError> {
-    Ok(Plan::single(Box::new(MutualVisibility)))
+pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
+    Ok(Plan::single(Box::new(MutualVisibility {
+        radius: config.robot_radius / pow10_neg(config.threshold_precision),
+    })))
 }
 
+/// Where the settings leave the paper's model, one sentence each.
 #[must_use]
 pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = vec![
-        "The robots never stop by themselves. Even once every robot sees every other one they keep making tiny adjustments, because a robot cannot be sure that nobody is still hidden, and those adjustments are chosen so that everybody stays in sight. The run ends when the moves become too small to make (shorter than ε), or at a turn limit if you set one.".to_owned(),
+        "The robots never stop by themselves: they keep making tiny moves that keep everyone in sight, until the moves are shorter than ε or a turn limit is reached.".to_owned(),
     ];
     if !config.obstructed_visibility {
-        notes.push("Turn on Settings → Model → Visibility → “Robots block the view” to see what this algorithm is for. With transparent robots every robot already sees every other one from the very start, so there is nothing for the algorithm to fix and the robots barely move.".to_owned());
+        notes.push("Turn on Robots block the view to see what this algorithm is for: with transparent robots everyone already sees everyone.".to_owned());
     }
     if config.scheduler != SchedulerKind::Sequential {
-        notes.push("Outside the model: this algorithm is designed for one robot at a time. When several robots move together, two of them can end up in line with a third without either noticing, which hides robots from each other again; the run may take much longer, or stop with some robots still hidden.".to_owned());
+        notes.push("Outside the model: the paper's rule is for one robot at a time, and robots moving together can line up and hide each other again.".to_owned());
+    }
+    if config.robot_radius > 0.0 {
+        notes.push("Outside the model: the paper's robots are points, and a fat robot's move can still bring another robot into its own line of sight to a third.".to_owned());
     }
     if config.visibility_radius.is_some() {
-        notes.push("Outside the model: this algorithm is designed for robots that can see arbitrarily far, where only other robots block the view. With a limited sight radius, robots that are far apart never see each other however they move, so complete mutual visibility may be out of reach.".to_owned());
+        notes.push("Outside the model: with a limited sight radius, robots that are far apart never see each other however they move.".to_owned());
     }
     notes
 }
