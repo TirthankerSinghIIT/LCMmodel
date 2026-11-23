@@ -18,6 +18,14 @@
 //!   `2π/3 + φ ≤ a < 3π/2` go to `p` · `3π/2 ≤ a` or `a ≤ π/3 - φ` stay ·
 //!   otherwise go to `p` turned by `2π/3 + 2φ`.
 //!
+//! Runs take the compass from the `frames` setting: `Compass` gives each
+//! robot a deviation of at most φ (`compass_error`), static or redrawn at
+//! every Look; `Global` is an exact compass (φ = 0, the static rules).
+//! `Rotated` and `Disoriented` are refused: they turn each robot's axes by an
+//! unbounded random angle at every Look, and `Disoriented` also flips
+//! handedness, so the paper's bounded deviation and shared chirality fail
+//! (review of #17, fix B2).
+//!
 //! The paper's robots never terminate (gathering is "eventually co-located
 //! forever"). Here a robot that finds the other on its own point terminates
 //! under the sequential and synchronous schedulers, where that is safe; under
@@ -25,7 +33,7 @@
 
 use core::f64::consts::{FRAC_PI_2, PI};
 use lcm_core::{
-    Algorithm, ConfigError, Decision, Look, OverlayUpdate, Plan, Point, Rng, SchedulerKind,
+    Algorithm, ConfigError, Decision, Frames, Look, OverlayUpdate, Plan, Point, Rng, SchedulerKind,
     Scratch, SimConfig,
 };
 
@@ -52,43 +60,70 @@ fn turn(p: Point, w: f64) -> Point {
     Point::new(c * p.x - s * p.y, s * p.x + c * p.y)
 }
 
-/// The rule's destination for a robot at the origin seeing the other at `p`.
+/// What a rule set does when the other robot lies at angle `a` in [0, 2π)
+/// in the robot's own frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Action {
+    /// Stay where it is.
+    Stay,
+    /// Go to the other robot.
+    Go,
+    /// A_SS: go west by the distance to the other robot.
+    West,
+    /// A_SD / A_AD: go to the other robot's position turned about itself.
+    Turn,
+}
+
+/// The sector of `rules` that angle `a` (in [0, 2π)) falls in.
 #[must_use]
-pub fn destination(rules: Rules, phi: f64, p: Point) -> Point {
-    let stay = Point::new(0.0, 0.0);
-    let mut a = libm::atan2(p.y, p.x);
-    if a < 0.0 {
-        a += 2.0 * PI;
-    }
+pub fn action(rules: Rules, phi: f64, a: f64) -> Action {
     match rules {
         Rules::StaticCompass => {
             if a > 0.0 && a <= PI {
-                p
+                Action::Go
             } else if a > PI && a <= 3.0 * FRAC_PI_2 + phi {
-                Point::new(-libm::hypot(p.x, p.y), 0.0)
+                Action::West
             } else {
-                stay
+                Action::Stay
             }
         }
         Rules::DynamicSynchronous => {
             if a > FRAC_PI_2 + phi && a <= 3.0 * FRAC_PI_2 - phi {
-                p
+                Action::Go
             } else if a <= FRAC_PI_2 - phi || a > 3.0 * FRAC_PI_2 + phi {
                 // (-π/2 + φ, π/2 - φ], written on [0, 2π).
-                stay
+                Action::Stay
             } else {
-                turn(p, FRAC_PI_2 + phi)
+                Action::Turn
             }
         }
         Rules::DynamicAsynchronous => {
             if a >= 2.0 * PI / 3.0 + phi && a < 3.0 * FRAC_PI_2 {
-                p
+                Action::Go
             } else if a >= 3.0 * FRAC_PI_2 || a <= PI / 3.0 - phi {
-                stay
+                Action::Stay
             } else {
-                turn(p, 2.0 * PI / 3.0 + 2.0 * phi)
+                Action::Turn
             }
         }
+    }
+}
+
+/// The rule's destination for a robot at the origin seeing the other at `p`.
+#[must_use]
+pub fn destination(rules: Rules, phi: f64, p: Point) -> Point {
+    let mut a = libm::atan2(p.y, p.x);
+    if a < 0.0 {
+        a += 2.0 * PI;
+    }
+    match action(rules, phi, a) {
+        Action::Stay => Point::new(0.0, 0.0),
+        Action::Go => p,
+        Action::West => Point::new(-libm::hypot(p.x, p.y), 0.0),
+        Action::Turn => match rules {
+            Rules::DynamicAsynchronous => turn(p, 2.0 * PI / 3.0 + 2.0 * phi),
+            _ => turn(p, FRAC_PI_2 + phi),
+        },
     }
 }
 
@@ -176,7 +211,7 @@ impl Algorithm for CompassGathering {
 /// otherwise).
 ///
 /// # Errors
-/// Not exactly two robots, or faulty robots.
+/// Not exactly two robots, faulty robots, or rotated or disoriented frames.
 pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
     let refuse = |m: &str| Err(ConfigError::Unsupported(m.to_owned()));
     let n = config
@@ -186,24 +221,27 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
         .map_or(config.num_of_robots as usize, Vec::len);
     if n != 2 {
         return refuse(
-            "Compass gathering is for exactly two robots: its rules decide what to do from where the one other robot lies by the robot's own compass. Set Robots to 2 (Settings → Robots → Swarm).",
+            "Compass gathering is for exactly two robots: its rules decide what to do from where the one other robot lies by the robot's own compass. Set Robots to 2.",
         );
     }
     if config.num_of_faults > 0 {
-        return refuse("Compass gathering is designed for two robots that never fail: with only two robots, a faulty one leaves nobody to gather with. Set Faulty robots to 0 (Settings → Model → Faults).");
+        return refuse("Compass gathering is designed for two robots that never fail: with only two robots, a faulty one leaves nobody to gather with. Set Faulty robots to 0.");
+    }
+    if matches!(config.frames, Frames::Rotated | Frames::Disoriented) {
+        return refuse("Compass gathering needs robots whose compasses are off by a bounded angle and agree on clockwise: set Coordinate frames to Global (exact compasses) or to Compass with an error. Rotated and disoriented frames turn each robot's axes at random at every look (and disoriented ones also mirror them), so the rules lose their meaning.");
     }
     let overlapping = matches!(
         config.scheduler,
         SchedulerKind::Async | SchedulerKind::KAsync
     );
-    let rules = if config.compass_static || config.frames != lcm_core::Frames::Compass {
+    let rules = if config.compass_static || config.frames != Frames::Compass {
         Rules::StaticCompass
     } else if overlapping {
         Rules::DynamicAsynchronous
     } else {
         Rules::DynamicSynchronous
     };
-    let phi = if config.frames == lcm_core::Frames::Compass {
+    let phi = if config.frames == Frames::Compass {
         config.compass_error.to_radians()
     } else {
         0.0
@@ -215,52 +253,35 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
     })))
 }
 
-/// Where the settings leave the paper's guarantees.
+/// Where the settings leave the paper's guarantees, one sentence each.
 #[must_use]
 pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = Vec::new();
-    let phi = config.compass_error;
-    if config.frames != lcm_core::Frames::Compass {
+    if config.frames != Frames::Compass {
         notes.push(
-            "The robots' compasses are exact in this run, because Coordinate frames is not set to “Compass with an error”. Both robots agree on north, so they gather easily; set the frames to Compass (Settings → Model → Robot model) to see how the rules cope with compasses that point the wrong way.".to_owned(),
+            "The compasses are exact here (Coordinate frames: Global), so the robots use the fixed-compass rules with no error; choose Compass with an error to test the rules.".to_owned(),
         );
         return notes;
     }
+    let phi = config.compass_error;
     let overlapping = matches!(
         config.scheduler,
         SchedulerKind::Async | SchedulerKind::KAsync
     );
-    let (name, bound, tight) = if config.compass_static {
-        ("The rules for fixed compasses", 90.0, true)
+    let (name, bound) = if config.compass_static {
+        ("fixed compasses", 90.0)
     } else if overlapping {
-        (
-            "The rules for changing compasses, with robots acting on their own clocks,",
-            30.0,
-            false,
-        )
+        ("changing compasses on robots with their own clocks", 30.0)
     } else {
-        (
-            "The rules for changing compasses, with robots acting in rounds,",
-            45.0,
-            true,
-        )
+        ("changing compasses on robots acting in rounds", 45.0)
     };
     if phi >= bound {
         notes.push(format!(
-            "Outside the model: {name} only guarantee that the two robots meet while every compass error stays below {bound}°{}. This run allows errors of up to {phi}°, so the robots may circle each other for a very long time, or never meet.",
-            if tight {
-                ", and no rules can guarantee more than that"
-            } else {
-                "; whether some other rules could do better is not known"
-            }
-        ));
-    } else {
-        notes.push(format!(
-            "{name} guarantee that the two robots meet as long as every compass error stays below {bound}°, and this run allows at most {phi}°, so they will meet. Close to that bound it can take a very long time, because each correction overshoots a little."
+            "Outside the model: the rules for {name} are proved only for compass errors below {bound}°, and this run allows {phi}°."
         ));
     }
     if overlapping {
-        notes.push("With robots acting on their own clocks, the two robots never terminate, even after they have met: a robot cannot be sure that the other has finished moving, so stopping could be a mistake. They stay together, and the run goes on until a limit.".to_owned());
+        notes.push("With robots on their own clocks the two robots never terminate, even once together, since one cannot know the other has stopped moving (Remark 2 of the paper).".to_owned());
     }
     notes
 }

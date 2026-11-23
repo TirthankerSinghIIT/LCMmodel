@@ -17,9 +17,9 @@
 //!
 //! **Width of a robot.** A robot counts as standing on a path, or on another
 //! robot's ray from p*, when it is within `w = max(robot_radius, ε)` of it:
-//! the core's blocking width (docs/core-schema.md §7), and never less than ε,
-//! the distance at which two robots are one point for multiplicity
-//! detection. The same `w` decides that a path is blocked and which robots
+//! the core's blocking width (docs/core-schema.md §2, `robot_radius`), and
+//! never less than ε, the distance at which two robots are one point for
+//! multiplicity detection. The same `w` decides that a path is blocked and which robots
 //! lie on the blocked robot's own ray when its sector is chosen. With two
 //! tolerances (ε and 1e-12 rad) a robot just off the ray blocked the path but
 //! was then taken as the edge of the free sector, and the arc landed on it
