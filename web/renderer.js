@@ -97,7 +97,7 @@ export class Renderer {
     this.onFollowChange = null;
     // CSS px covered by floating panels; the world is fitted into what's left.
     this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
-    this.options = { showLights: false, visibility: null, links: false, allowedRegion: false, multiplicities: false, walk: null, grid: true, measure: null, adversary: null, editor: null, trails: true };
+    this.options = { showLights: false, visibility: null, links: false, allowedRegion: false, multiplicities: false, walk: null, grid: true, measure: null, adversary: null, editor: null, trails: false };
     // Motion trails: each robot's recent positions (world units), newest last, in a ring buffer per robot.
     this.trail = null;
     // Decision pulses: robot -> when it picked a new destination; and the targets last seen.

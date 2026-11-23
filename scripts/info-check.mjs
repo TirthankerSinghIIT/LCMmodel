@@ -35,19 +35,23 @@ await js("localStorage.removeItem('lcm-info-auto')");
 const coverage = await js(`(async () => {
   const { explain, EXPLAINED } = await import('/web/explain.js');
   const { SETTINGS } = await import('/web/settings.js');
-  const values = { ...window.lcm.settings.values }, gaps = [];
+  const values = { ...window.lcm.settings.values }, gaps = [], long = [];
   for (const s of SETTINGS.filter((x) => EXPLAINED.has(x.key))) {
     const opts = s.kind === 'select' ? (typeof s.options === 'function' ? s.options(values) : s.options).map(([o]) => o)
       : s.kind === 'switch' ? [true, false] : [s.min ?? 0, s.value, s.max ?? s.value];
     for (const o of opts) {
       const c = explain(s.key, { ...values, [s.key]: o }, { key: 'SqGathering', name: 'SqGathering', multiplicities: true });
       if (!c || !c.title || !c.paras?.length || c.paras.some((x) => x.length < 40)) gaps.push(s.key + '=' + o);
+      // Short: one paragraph of one or two sentences, and a one-sentence tip.
+      const sentences = (t) => (t.match(/[.!?](?=\s+[A-Z(“]|$)/g) ?? []).length;
+      if (c && (c.paras.length !== 1 || sentences(c.paras[0]) > 2 || c.paras[0].length > 220 || (c.tip && sentences(c.tip) > 1))) long.push(s.key + '=' + o);
     }
   }
-  return { keys: EXPLAINED.size, gaps };
+  return { keys: EXPLAINED.size, gaps, long };
 })()`);
 check("every option of every explained setting has a card with a title and real text", coverage.gaps.length === 0,
   coverage.gaps.length ? coverage.gaps.join(", ") : `${coverage.keys} settings`);
+check("every card is one or two short sentences (at most 220 characters)", coverage.long.length === 0, coverage.long.join(", "));
 check("each explained setting has an ⓘ button", (await js("document.querySelectorAll('#settings .info-btn').length")) === coverage.keys);
 
 // Changing a setting opens its card, under that setting.
@@ -119,11 +123,12 @@ check("a sub-option that appears fades in", await js("document.querySelector('[d
 // Only a note that a change brings in animates; the others stay still.
 await js("document.querySelector('#algorithm').value = 'SqGathering'; document.querySelector('#algorithm').dispatchEvent(new Event('change', { bubbles: true }))");
 await sleep(800);
+await js("(() => { const h = document.querySelector('#model_notes .brief-head'); if (h?.getAttribute('aria-expanded') === 'false') h.click(); })()");
 await js("document.querySelector('#tab-model').click()");
 await change("multiplicity", "none");
 await sleep(900);
 const before = await js("[...document.querySelectorAll('#model_notes .brief-notes li')].map((li) => li.className)");
-await change("unlimited_visibility", false);
+await change("obstructed_visibility", true);
 await sleep(900);
 const after = await js("[...document.querySelectorAll('#model_notes .brief-notes li')].map((li) => li.className)");
 check("a note brought in by a change slides in; notes already shown stay still",

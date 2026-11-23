@@ -22,6 +22,11 @@ await until("!!window.lcm", 10000);
 await js("window.lcm.ready");
 check("page loads and shows the first swarm", true, `${Date.now() - t0} ms to first frame`);
 check("starts in the ready state", (await js("lcm.state")) === "ready");
+check("motion trails start off (they cost a path per robot); the button says so",
+  await js("lcm.renderer.options.trails === false && document.getElementById('trails').getAttribute('aria-pressed') === 'false'"));
+const briefStart = await js(`(() => { const b = document.querySelector('#model_notes .brief-body'); const h = document.querySelector('#model_notes .brief-head');
+  return { hidden: !b || b.hidden, expanded: h?.getAttribute('aria-expanded'), head: h?.textContent.trim() ?? '' }; })()`);
+check("the algorithm brief starts folded, its header still names the algorithm", briefStart.hidden && briefStart.expanded === "false" && /Center of Gravity|Gathering/.test(briefStart.head), JSON.stringify(briefStart));
 const build = await js("fetch('web/pkg/build.json', { cache: 'no-store' }).then((r) => r.json())");
 const loaded = await js("lcm.client.loadedVersion");
 check("the core is loaded with this build's id, so a stale cache cannot mix versions", !!build.id && loaded === build.id, `build ${build.id}, worker loaded ${loaded}`);
@@ -772,10 +777,38 @@ await js(`(() => { const s = document.getElementById('algorithm'); s.value = 'Ga
 await sleep(600);
 const plain = await js(`({ card: !document.querySelector('.algo-group').hidden, locked: document.querySelectorAll('.field.frozen').length, frames: lcm.settings.values.frames, robots: lcm.settings.values.num_of_robots })`);
 check("back on Center of Gravity: no card, nothing locked, the user's own values back", !plain.card && plain.locked === 0 && plain.frames === "global" && plain.robots !== 2, JSON.stringify(plain));
+const briefAfter = await js("document.querySelector('#model_notes .brief-body')?.hidden ?? true");
+check("changing the algorithm leaves the brief folded", briefAfter);
 await click("#trails");
-const trailsOff = await js("lcm.renderer.options.trails === false && document.getElementById('trails').getAttribute('aria-pressed') === 'false'");
+const trailsOn = await js("lcm.renderer.options.trails === true && document.getElementById('trails').getAttribute('aria-pressed') === 'true'");
 await click("#trails");
-check("the trails button turns motion trails off and on", trailsOff && (await js("lcm.renderer.options.trails")));
+check("the trails button turns motion trails on and off", trailsOn && (await js("lcm.renderer.options.trails === false")));
+await js("document.activeElement?.blur()");
+await key("p", "KeyP", 80);
+const trailsKey = await js("lcm.renderer.options.trails");
+await key("p", "KeyP", 80);
+check("P turns motion trails on and off too", trailsKey === true && (await js("lcm.renderer.options.trails === false")));
+
+// Playing the adversary switches an async run to Sequential; leaving it switches back, unless the user chose another scheduler.
+const scheduler = () => js("lcm.settings.values.scheduler");
+await js(`lcm.settings.set('scheduler', 'async')`);
+await sleep(400);
+await click("#adversary");
+await sleep(500);
+const during = await scheduler();
+await click("#adversary");
+await sleep(500);
+const after = await scheduler();
+check("adversary mode: async → Sequential while on → async again when off", during === "sequential" && after === "async", JSON.stringify({ during, after }));
+await click("#adversary");
+await sleep(500);
+await js(`lcm.settings.set('scheduler', 'ssync')`);
+await sleep(300);
+await click("#adversary");
+await sleep(500);
+const kept = await scheduler();
+check("adversary mode: a scheduler the user chose meanwhile is kept when it ends", kept === "ssync", kept);
+await js(`lcm.settings.set('scheduler', 'async')`);
 
 check("no errors in the console", consoleErrors.length === 0, consoleErrors.join(" / "));
 

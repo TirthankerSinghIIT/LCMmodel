@@ -129,13 +129,12 @@ await shot("sim-sqgathering-stacked");
 await js("document.getElementById('play').click()");
 check("simulator: the stacked start gathers too", await until("window.lcm.state === 'ended' && window.lcm.stats.terminated === window.lcm.stats.robots", 90000));
 
-// Outside Theorem 5's model the run goes on with a note saying so; refusals come back as a message.
+// Refusals come back as a message, not a broken page.
 await js(`window.lcm.settings.set("unlimited_visibility", false)`);
 await js("document.getElementById('reset').click()");
 await sleep(400);
-check("simulator: limited visibility runs, with a note that it is untested ground",
-  await js("!document.getElementById('model_notes').hidden && /Untested ground/.test(document.getElementById('model_notes').textContent) && /nobody knows whether it always gathers/.test(document.getElementById('model_notes').textContent)"),
-  await js("document.getElementById('model_notes').textContent"));
+check("simulator: limited visibility is refused with the reason",
+  await js("/unlimited visibility/.test(document.getElementById('toast').textContent)"), await js("document.getElementById('toast').textContent"));
 await js(`window.lcm.settings.set("unlimited_visibility", true); window.lcm.settings.set("num_of_faults", 1)`);
 await sleep(300);
 // SqGathering assumes robots that never fail: the setting is locked at 0, with the reason beside it.
