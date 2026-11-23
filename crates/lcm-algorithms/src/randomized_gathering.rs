@@ -123,7 +123,7 @@ fn two_robots(config: &SimConfig, name: &str) -> Result<(), ConfigError> {
         Ok(())
     } else {
         Err(ConfigError::Unsupported(format!(
-            "{name} is for exactly two robots: with more, robots that meet would have to recognise each other and merge into one, which these rules do not do. Set Robots to 2 (Settings → Robots → Swarm)."
+            "{name} is for exactly two robots: with more, robots that meet would have to recognise each other and merge into one, which these rules do not do. Set Robots to 2."
         )))
     }
 }

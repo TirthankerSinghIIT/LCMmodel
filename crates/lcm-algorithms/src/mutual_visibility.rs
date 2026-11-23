@@ -151,7 +151,7 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
         "The robots never stop by themselves: they keep making tiny moves that keep everyone in sight, until the moves are shorter than ε or a turn limit is reached.".to_owned(),
     ];
     if !config.obstructed_visibility {
-        notes.push("Turn on Robots block the view to see what this algorithm is for: with transparent robots everyone already sees everyone.".to_owned());
+        notes.push("Turn on obstructed visibility (robots block the view) to see what this algorithm is for: with transparent robots everyone already sees everyone.".to_owned());
     }
     if config.scheduler != SchedulerKind::Sequential {
         notes.push("Outside the model: the paper's rule is for one robot at a time, and robots moving together can line up and hide each other again.".to_owned());

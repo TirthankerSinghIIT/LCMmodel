@@ -228,7 +228,7 @@ pub fn plan(config: &SimConfig) -> Result<Plan, ConfigError> {
         return refuse("Compass gathering is designed for two robots that never fail: with only two robots, a faulty one leaves nobody to gather with. Set Faulty robots to 0.");
     }
     if matches!(config.frames, Frames::Rotated | Frames::Disoriented) {
-        return refuse("Compass gathering needs robots whose compasses are off by a bounded angle and agree on clockwise: set Coordinate frames to Global (exact compasses) or to Compass with an error. Rotated and disoriented frames turn each robot's axes at random at every look (and disoriented ones also mirror them), so the rules lose their meaning.");
+        return refuse("Compass gathering needs robots whose compasses are off by a bounded angle and agree on clockwise: set Robots' axes to Shared (exact compasses) or to Unreliable compass. Rotated and disoriented frames turn each robot's axes at random at every look (and disoriented ones also mirror them), so the rules lose their meaning.");
     }
     let overlapping = matches!(
         config.scheduler,
@@ -259,7 +259,7 @@ pub fn notes(config: &SimConfig) -> Vec<String> {
     let mut notes = Vec::new();
     if config.frames != Frames::Compass {
         notes.push(
-            "The compasses are exact here (Coordinate frames: Global), so the robots use the fixed-compass rules with no error; choose Compass with an error to test the rules.".to_owned(),
+            "The compasses are exact here (Robots' axes: Shared), so the robots use the fixed-compass rules with no error; choose Unreliable compass to test the rules.".to_owned(),
         );
         return notes;
     }

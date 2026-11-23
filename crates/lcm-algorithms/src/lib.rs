@@ -163,10 +163,10 @@ pub fn notes(key: &str, config: &SimConfig) -> Vec<String> {
         "MutualVisibility" => mutual_visibility::notes(config),
         "RandomizedGathering" | "RandomizedGatheringUniform" => randomized_gathering::notes(config),
         "TwoTask" => vec![
-            "This run never ends by itself. Half of the robots (red) follow the smallest-enclosing-circle rule and head for the edge of the circle around the swarm, while the other half (blue) follow the centre-of-gravity rule and head for its middle. The two groups keep pulling the swarm in different directions, so the run goes on until it stalls or reaches a limit, exactly as in the original simulator.".to_owned(),
+            "This run never ends by itself: the red robots run SEC and head for the edge of the swarm's circle while the blue ones run Gathering and head for its middle, as in the original simulator.".to_owned(),
         ],
         "CircleFormation" if config.scheduler == SchedulerKind::Fsync => vec![
-            "With every robot moving at once (FSYNC), the circle each robot aims for moves along with the robots, because it is computed from their positions, so some starts never settle: in testing, 4 out of 12 starts with 10 or 30 robots were still moving at the event limit. Under the semi-synchronous, sequential and asynchronous schedulers the robots settle into an evenly spaced circle.".to_owned(),
+            "Under FSYNC the circle each robot aims for moves with the robots, so some starts never settle (4 of 12 starts with 10 or 30 robots in testing).".to_owned(),
         ],
         _ => Vec::new(),
     }

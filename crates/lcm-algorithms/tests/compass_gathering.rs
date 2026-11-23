@@ -141,7 +141,7 @@ fn two(frames: Frames, scheduler: SchedulerKind) -> SimConfig {
 fn rotated_and_disoriented_frames_are_refused() {
     for frames in [Frames::Rotated, Frames::Disoriented] {
         match lcm_algorithms::simulation(&two(frames, SchedulerKind::Ssync)) {
-            Err(ConfigError::Unsupported(m)) => assert!(m.contains("Coordinate frames"), "{m}"),
+            Err(ConfigError::Unsupported(m)) => assert!(m.contains("Robots' axes"), "{m}"),
             Err(e) => panic!("{frames:?}: expected Unsupported, got {e}"),
             Ok(_) => panic!("{frames:?} should be refused"),
         }
